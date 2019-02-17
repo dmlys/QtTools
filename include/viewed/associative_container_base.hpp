@@ -103,9 +103,9 @@ namespace viewed
 		class Traits,
 		class SignalTraits = default_signal_traits<Type>
 	>
-	class associative_conatiner_base : protected Traits
+	class associative_container_base : protected Traits
 	{
-		typedef associative_conatiner_base<Type, Traits, SignalTraits> self_type;
+		typedef associative_container_base<Type, Traits, SignalTraits> self_type;
 	
 	protected:
 		typedef Traits        traits_type;
@@ -223,26 +223,26 @@ namespace viewed
 		void assign(std::initializer_list<value_type> ilist) { assign(std::begin(ilist), std::end(ilist)); }
 
 	protected:
-		associative_conatiner_base(traits_type traits = {})
+		associative_container_base(traits_type traits = {})
 		    : traits_type(std::move(traits))
 		{};
 
 		template <class ... StoreArgs>
-		associative_conatiner_base(traits_type traits, StoreArgs && ... storeArgs)
+		associative_container_base(traits_type traits, StoreArgs && ... storeArgs)
 			: traits_type(std::move(traits)),
 			  m_store(traits_type::make_store(std::forward<StoreArgs>(storeArgs)...))
 		{};
 
-		associative_conatiner_base(const associative_conatiner_base &) = delete;
-		associative_conatiner_base & operator =(const associative_conatiner_base &) = delete;
+		associative_container_base(const associative_container_base &) = delete;
+		associative_container_base & operator =(const associative_container_base &) = delete;
 
-		associative_conatiner_base(associative_conatiner_base && op) = default;
-		associative_conatiner_base & operator =(associative_conatiner_base && op) = default;
+		associative_container_base(associative_container_base && op) = default;
+		associative_container_base & operator =(associative_container_base && op) = default;
 	};
 
 	template <class Type, class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	void associative_conatiner_base<Type, Traits, SignalTraits>::upsert_newrecs
+	void associative_container_base<Type, Traits, SignalTraits>::upsert_newrecs
 		(SinglePassIterator first, SinglePassIterator last)
 	{
 		signal_store_type erased, updated, inserted;
@@ -274,7 +274,7 @@ namespace viewed
 
 	template <class Type, class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	void associative_conatiner_base<Type, Traits, SignalTraits>::assign_newrecs
+	void associative_container_base<Type, Traits, SignalTraits>::assign_newrecs
 		(SinglePassIterator first, SinglePassIterator last)
 	{
 		signal_store_type erased, updated, inserted;
@@ -316,11 +316,12 @@ namespace viewed
 		erased.erase(erased_last, erased.end());
 		notify_views(erased, updated, inserted);
 
-		for (auto * ptr : erased) m_store.erase(*ptr);
+		auto key_extractor = m_store.key_extractor();
+		for (auto * ptr : erased) m_store.erase(key_extractor(*ptr));
 	}
 
 	template <class Type, class Traits, class SignalTraits>
-	void associative_conatiner_base<Type, Traits, SignalTraits>::erase_from_views(const_iterator first, const_iterator last)
+	void associative_container_base<Type, Traits, SignalTraits>::erase_from_views(const_iterator first, const_iterator last)
 	{
 		signal_store_type todel;
 		std::transform(first, last, std::back_inserter(todel), get_pointer);
@@ -330,14 +331,14 @@ namespace viewed
 	}
 
 	template <class Type, class Traits, class SignalTraits>
-	void associative_conatiner_base<Type, Traits, SignalTraits>::clear()
+	void associative_container_base<Type, Traits, SignalTraits>::clear()
 	{
 		m_clear_signal();
 		m_store.clear();
 	}
 
 	template <class Type, class Traits, class SignalTraits>
-	void associative_conatiner_base<Type, Traits, SignalTraits>::notify_views
+	void associative_container_base<Type, Traits, SignalTraits>::notify_views
 		(signal_store_type & erased, signal_store_type & updated, signal_store_type & inserted)
 	{
 		auto inserted_first = inserted.data();
@@ -373,7 +374,7 @@ namespace viewed
 
 
 	template <class Type, class Traits, class SignalTraits>
-	auto associative_conatiner_base<Type, Traits, SignalTraits>::erase(const_iterator first, const_iterator last) -> const_iterator
+	auto associative_container_base<Type, Traits, SignalTraits>::erase(const_iterator first, const_iterator last) -> const_iterator
 	{
 		erase_from_views(first, last);
 		return m_store.erase(first, last);
@@ -381,7 +382,7 @@ namespace viewed
 
 	template <class Type, class Traits, class SignalTraits>
 	template <class CompatibleKey>
-	auto associative_conatiner_base<Type, Traits, SignalTraits>::erase(const CompatibleKey & key) -> size_type
+	auto associative_container_base<Type, Traits, SignalTraits>::erase(const CompatibleKey & key) -> size_type
 	{
 		const_iterator first, last;
 		std::tie(first, last) = m_store.equal_range(key);
@@ -392,14 +393,14 @@ namespace viewed
 
 	template <class Type, class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	inline void associative_conatiner_base<Type, Traits, SignalTraits>::upsert(SinglePassIterator first, SinglePassIterator last)
+	inline void associative_container_base<Type, Traits, SignalTraits>::upsert(SinglePassIterator first, SinglePassIterator last)
 	{
 		return upsert_newrecs(first, last);
 	}
 
 	template <class Type, class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	inline void associative_conatiner_base<Type, Traits, SignalTraits>::assign(SinglePassIterator first, SinglePassIterator last)
+	inline void associative_container_base<Type, Traits, SignalTraits>::assign(SinglePassIterator first, SinglePassIterator last)
 	{
 		return assign_newrecs(first, last);
 	}
