@@ -41,10 +41,9 @@ namespace viewed
 		typedef viewed::AbstractItemModel model_type;
 
 	public:
-		/// reinitializes view
-		/// default implementation just copies from owner
-		/// calls qt beginResetModel/endResetModel
-		virtual void reinit_view() override;
+		/// reinitializes view and notifies anyone via qt beginResetModel/endResetModel signals
+		/// default implementation emits beginResetModel, calls reinit_view, emits endResetModel
+		virtual void reinit_view_and_notify();
 
 	protected:
 		/// acquires pointer to qt model, normally you would inherit both QAbstractItemModel and this class.
@@ -94,8 +93,11 @@ namespace viewed
 		/// calls qt beginResetModel/endResetModel
 		virtual void clear_view() override;
 		
+	protected:
+		view_qtbase(ext::noinit_type noinit, container_type * owner) : base_type(noinit, owner) {}
+
 	public:
-		view_qtbase(container_type * owner) : base_type(owner) { }
+		view_qtbase(container_type * owner) : view_qtbase(ext::noinit, owner) { this->init(); }
 		virtual ~view_qtbase() = default;
 
 		view_qtbase(const view_qtbase &) = delete;
@@ -164,9 +166,9 @@ namespace viewed
 	}
 
 	template <class Container>
-	void view_qtbase<Container>::reinit_view()
+	void view_qtbase<Container>::reinit_view_and_notify()
 	{
-		auto * model = get_model();
+		auto * model = this->get_model();
 		model->beginResetModel();
 		base_type::reinit_view();
 		model->endResetModel();

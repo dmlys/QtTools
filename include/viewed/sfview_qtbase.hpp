@@ -157,14 +157,21 @@ namespace viewed
 		template <class ... Args> auto filter_by(Args && ... args) -> refilter_type;
 		template <class ... Args> void sort_by(Args && ... args);
 
+	protected:
+		sfview_qtbase(ext::noinit_type noinit, container_type * owner,
+		              sort_pred_type sort_pred = {},
+		              filter_pred_type filter_pred = {})
+			: base_type(noinit, owner),
+		      m_sort_pred(std::move(sort_pred)),
+		      m_filter_pred(std::move(filter_pred))
+		{ }
+
 	public:
 		sfview_qtbase(container_type * owner,
-		            sort_pred_type sortPred = {},
-		            filter_pred_type filterPred = {})
-			: base_type(owner),
-		      m_sort_pred(std::move(sortPred)),
-		      m_filter_pred(std::move(filterPred))
-		{ }
+		              sort_pred_type sort_pred = {},
+		              filter_pred_type filter_pred = {})
+		    : sfview_qtbase(ext::noinit, owner, std::move(sort_pred), std::move(filter_pred))
+		{ this->init(); }
 
 		virtual ~sfview_qtbase() = default;
 
@@ -179,9 +186,6 @@ namespace viewed
 	template <class Container, class SortPred, class FilterPred>
 	void sfview_qtbase<Container, SortPred, FilterPred>::reinit_view()
 	{
-		auto * model = this->get_model();
-		model->beginResetModel();
-
 		auto range = *m_owner | boost::adaptors::transformed(get_view_pointer);
 		if (not active(m_filter_pred))
 			m_store.assign(range.begin(), range.end());
@@ -193,8 +197,6 @@ namespace viewed
 		}
 
 		stable_sort(m_store.begin(), m_store.end());
-
-		model->endResetModel();
 	}
 
 	template <class Container, class SortPred, class FilterPred>

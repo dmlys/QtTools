@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <ext/noinit.hpp>
 #include <viewed/sftree_facade_qtbase.hpp>
 #include <viewed/sftree_is_base_of.hpp>
 
@@ -91,17 +92,18 @@ namespace viewed
 		/// called when container is cleared, clears m_store.
 		virtual void clear_view();
 
-		/// connects container signals to appropriate handlers
-		virtual void connect_signals();
-
 	public:
 		/// returns pointer to owning container
 		const auto & get_owner() const noexcept { return m_owner; }
 
+		/// connects container signals to appropriate handlers
+		virtual void connect_signals();
 		/// reinitializes view
 		/// default implementation just copies from owner
 		virtual void reinit_view();
-
+		/// reinitializes view and notifies anyone via qt beginResetModel/endResetModel signals
+		/// default implementation emits beginResetModel, calls reinit_view, emits endResetModel
+		virtual void reinit_view_and_notify();
 		/// normally should not be called outside of view class.
 		/// Provided, when view class used directly without inheritance, to complete initialization.
 		/// Calls connects signals and calls reinit_view.
@@ -110,9 +112,13 @@ namespace viewed
 		/// or directly connect_signals/reinit_view
 		virtual void init();
 
-	public:
-		sftree_view_qtbase(std::shared_ptr<container_type> owner, QObject * parent = nullptr) 
+	protected:
+		sftree_view_qtbase(ext::noinit_type noinit, std::shared_ptr<container_type> owner, QObject * parent)
 			: base_type(parent), m_owner(std::move(owner)) {}
+
+	public:
+		sftree_view_qtbase(std::shared_ptr<container_type> owner, QObject * parent = nullptr)
+			: sftree_view_qtbase(ext::noinit, std::move(owner), parent) { this->init(); }
 
 		virtual ~sftree_view_qtbase() = default;
 	};
@@ -132,8 +138,6 @@ namespace viewed
 		    boost::make_transform_iterator(m_owner->end(), get_view_pointer)
 		);
 
-		this->beginResetModel();
-
 		this->m_root.nvisible = 0;
 		this->m_root.children.clear();
 
@@ -148,9 +152,14 @@ namespace viewed
 		ctx.first = first;
 		ctx.last  = last;
 		this->reset_page(this->m_root, ctx);
+	}
 
+	template <class ... Types>
+	void sftree_view_qtbase<Types...>::reinit_view_and_notify()
+	{
+		this->beginResetModel();
+		this->reinit_view();
 		this->endResetModel();
-
 	}
 
 	template <class ... Types>

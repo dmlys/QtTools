@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <vector>
+#include <ext/noinit.hpp>
 #include <ext/range/range_traits.hpp>
 
 #include <boost/iterator/iterator_adaptor.hpp>
@@ -150,14 +151,15 @@ namespace viewed
 		/// returns pointer to owning container
 		container_type * get_owner() const noexcept { return m_owner; }
 
+		/// connects container signals to appropriate handlers
+		virtual void connect_signals();
 		/// reinitializes view
 		/// default implementation just copies from owner
 		virtual void reinit_view();
-
 		/// Normally should not be called outside of view class.
-		/// Calls connects signals and calls reinit_view.
+		/// Calls connects_signals and calls reinit_view.
 		/// 
-		/// Derived views probably will automatically call it constructor
+		/// Derived views probably will automatically call it from constructor
 		/// or directly connect_signals/reinit_view
 		virtual void init();
 
@@ -170,9 +172,6 @@ namespace viewed
 			const signal_range_type & inserted);
 
 	protected:
-		/// connects container signals to appropriate handlers
-		virtual void connect_signals();
-
 		/// container event handlers, those are called on container signals,
 		/// you could reimplement them to provide proper handling of your view
 		
@@ -204,8 +203,11 @@ namespace viewed
 		/// where N = m_store.size(), M = recs.size()
 		void sorted_erase_records(const signal_range_type & sorted_erased);
 
+	protected:
+		view_base(ext::noinit_type noinit, container_type * owner) : m_owner(owner) {}
+
 	public:
-		view_base(container_type * owner) : m_owner(owner) { }
+		view_base(container_type * owner) : view_base(ext::noinit, owner) { this->init(); }
 		virtual ~view_base() = default;
 
 		view_base(const view_base &) = delete;
