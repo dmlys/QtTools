@@ -3,6 +3,7 @@
 #include <boost/range/iterator_range.hpp>
 #include <boost/signals2.hpp>
 
+
 namespace viewed
 {
 	/// Traits class describes signal types used by container and views
@@ -49,5 +50,21 @@ namespace viewed
 			boost::signals2::keywords::mutex_type<signal_mutex_type>
 		>::type clear_signal_type;
 	};
-	
+
+
+	template <class Type, class = void>
+	struct is_signal_traits_lookalile : std::false_type {};
+
+	template <class Type>
+	struct is_signal_traits_lookalile<Type, std::void_t<
+		typename Type::signal_range_type,
+		typename Type::update_signal_type,
+		typename Type::erase_signal_type,
+		typename Type::clear_signal_type
+	>> : std::true_type {};
+
+	/// you can specialize this trait to explicitly define if concrete type is a signal_traits type
+	template <class Type>
+	struct is_signal_traits : is_signal_traits_lookalile<Type> {};
+
 }

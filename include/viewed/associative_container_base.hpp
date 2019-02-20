@@ -3,7 +3,10 @@
 #include <iterator> // for back_inserter
 #include <viewed/signal_traits.hpp>
 #include <viewed/algorithm.hpp>
+
 #include <ext/try_reserve.hpp>
+#include <ext/type_traits.hpp>
+#include <ext/range/range_traits.hpp>
 
 namespace viewed
 {
@@ -14,13 +17,16 @@ namespace viewed
 		//////////////////////////////////////////////////////////////////////////
 		///                           types
 		//////////////////////////////////////////////////////////////////////////
+		/// Element type
+		using value_type = something;
+
 		/// container class that stores value_type,
 		/// main_store_type should provide stable pointers/references,
 		/// iterators allowed to be invalidated on modify operations.
-		typedef implementation_defined main_store_type;
+		using main_store_type = implementation_defined;
 		
 		/// container type used for storing raw pointers for views notifications
-		typedef implementation_defined signal_store_type;
+		using signal_store_type = implementation_defined;
 
 		/// assumed internal_value_type = typename main_store_type::value_type;
 
@@ -28,8 +34,6 @@ namespace viewed
 		///                   traits functions/functors
 		//////////////////////////////////////////////////////////////////////////
 		/// function interface can be static function members or static functor members.
-		/// if overloading isn't needed static function members  - will be ok,
-		/// but if you want provide several overloads - use static functor members
 
 		/// constructs main_store_type with provided arguments
 		static main_store_type make_store(... main_store_ctor_args);
@@ -39,10 +43,9 @@ namespace viewed
 		static       pointer   value_pointer(      internal_value_type & val)   { return val.get(); }
 
 		/// update takes current internal_value_type rvalue as first argument and some generic type as second.
-		/// It updates current value with new data
-		/// usually second type is some reference of value_type
-		struct update_type;
-		static const update_type                  update;
+		/// It updates current value with new data, usually second type is some reference of value_type
+		static void update(internal_value_type & val, const value_type &  newval);
+		static void update(internal_value_type & val,       value_type && newval);
 	};
 	*/
 
@@ -51,7 +54,7 @@ namespace viewed
 	struct signal_traits
 	{
 		/// random access range of valid pointers(at least at moment of call) to value_type
-		typedef implementation-defined signal_range_type;
+		using signal_range_type = implementation-defined;
 		
 		/// static functor/method for creating signal_range_type from some signal_store_type
 		static signal_range_type make_range(const Type ** first, const Type ** last);
@@ -60,30 +63,45 @@ namespace viewed
 		/// * connect call, connection, scoped_connection
 		/// * emission via call like: signal(args...)
 		
-		typedef implementation-defined connection;
-		typedef implementation-defined scoped_connection;
+		using connection        = implementation-defined;
+		using scoped_connection = implementation-defined;
 
 		/// signal is emitted in process of updating data in container(after update/insert, before erase) with 3 ranges of pointers.
 		///  * 1st to erased elements
 		///  * 2nd points to elements that were updated
 		///  * 3rd to newly inserted, order is unspecified
 		///  signature: void(signal_range_type erased, signal_range_type updated, signal_range_type inserted)
-		typedef implementation-defined update_signal_type;
+		using update_signal_type = implementation-defined;
 
 		/// signal is emitted before data is erased from container,
 		/// with range of pointers to elements to erase
 		/// signature: void(signal_range_type erased),
-		typedef implementation-defined erase_signal_type;
+		using erase_signal_type = implementation-defined;
 
 		/// signal is emitted before container is cleared.
 		/// signature: void(),
-		typedef implementation-defined clear_signal_type;
+		using clear_signal_type = implementation-defined;
 	}
 	*/
 
-	/// Base container class build on top of some defined by traits associative container
-	/// You are expected to inherit it and add more functional.
-	/// Generic container with STL compatible interface
+	template <class Type, class = void>
+	struct is_traits_type_lookalike : std::false_type {};
+
+	template <class Type>
+	struct is_traits_type_lookalike<Type, std::void_t<
+		typename Type::value_type,
+		typename Type::main_store_type,
+		decltype(Type::value_pointer(std::declval<typename Type::main_store_type::value_type>()))
+	>> : std::true_type {};
+
+	/// you can specialize this trait to explicitly define if concrete type is a trait
+	template <class Type>
+	struct is_traits_type : is_traits_type_lookalike<Type> {};
+
+
+	/// Base associative container class built on top of some defined by traits associative container.
+	/// Usually you will use more specialized class like hash_container or ordered container.
+	/// Generic container with STL compatible interface.
 	///
 	/// It store data in store specified by traits
 	/// iterators can be unstable, pointers and references - have to be stable
@@ -93,26 +111,25 @@ namespace viewed
 	/// Emits signals when elements added or erased
 	/// Can be used to build views on this container, see viewed::view_base
 	/// 
-	/// @Param Element type
-	/// @Param Traits traits class describes various aspects of container,
+	/// @Param Traits traits class describes value_type and various aspects of container,
 	///        see description above, also see hash_container_traits and ordered_container_traits for example
 	/// @Param SignalTraits traits class describes various aspects of signaling,
 	///        see description above, also see default_signal_traits
 	template <
-		class Type,
 		class Traits,
-		class SignalTraits = default_signal_traits<Type>
+		class SignalTraits = default_signal_traits<typename Traits::value_type>
 	>
 	class associative_container_base : protected Traits
 	{
-		typedef associative_container_base<Type, Traits, SignalTraits> self_type;
+		static_assert(is_traits_type<Traits>::value);
+		using self_type = associative_container_base<Traits, SignalTraits>;
 	
 	protected:
-		typedef Traits        traits_type;
-		typedef SignalTraits  signal_traits;
+		using traits_type   = Traits;
+		using signal_traits = SignalTraits;
 	
-		typedef typename traits_type::main_store_type       main_store_type;
-		typedef typename traits_type::signal_store_type     signal_store_type;
+		using main_store_type   = typename traits_type::main_store_type;
+		using signal_store_type = typename traits_type::signal_store_type;
 
 		struct get_reference_type
 		{
@@ -129,28 +146,28 @@ namespace viewed
 
 	public:
 		//container interface
-		typedef       Type      value_type;
-		typedef const Type &    const_reference;
-		typedef const Type *    const_pointer;
+		using value_type      = typename traits_type::value_type;
+		using const_reference = const value_type &;
+		using const_pointer   = const value_type *;
 
-		typedef const_pointer   pointer;
-		typedef const_reference reference;
+		using pointer   = const_pointer;
+		using reference = const_reference;
 
-		typedef typename main_store_type::size_type        size_type;
-		typedef typename main_store_type::difference_type  difference_type;
+		using size_type = typename main_store_type::size_type;
+		using difference_type = typename main_store_type::difference_type;
 
-		typedef typename main_store_type::const_iterator const_iterator;
-		typedef                           const_iterator iterator;
+		using const_iterator = typename main_store_type::const_iterator;
+		using iterator       =                           const_iterator;
 
 	public:
 		/// forward signal types
-		typedef typename signal_traits::connection          connection;
-		typedef typename signal_traits::scoped_connection   scoped_connection;
+		using connection        = typename signal_traits::connection;
+		using scoped_connection = typename signal_traits::scoped_connection;
 
-		typedef typename signal_traits::signal_range_type   signal_range_type;
-		typedef typename signal_traits::update_signal_type  update_signal_type;
-		typedef typename signal_traits::erase_signal_type   erase_signal_type;
-		typedef typename signal_traits::clear_signal_type   clear_signal_type;
+		using signal_range_type  = typename signal_traits::signal_range_type;
+		using update_signal_type = typename signal_traits::update_signal_type;
+		using erase_signal_type  = typename signal_traits::erase_signal_type;
+		using clear_signal_type  = typename signal_traits::clear_signal_type;
 
 	public:
 		// view related pointer helpers
@@ -214,12 +231,24 @@ namespace viewed
 		/// upserts new record from [first, last)
 		/// records which are already in container will be replaced with new ones
 		template <class SinglePassIterator>
-		void upsert(SinglePassIterator first, SinglePassIterator last);
+		auto upsert(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
+		{ return upsert_newrecs(first, last); }
+
+		template <class SinglePathRange>
+		auto upsert(SinglePathRange && range) -> std::enable_if_t<ext::is_range_v<SinglePathRange>>
+		{ return upsert(boost::begin(range), boost::end(range)); }
+
 		void upsert(std::initializer_list<value_type> ilist) { upsert(std::begin(ilist), std::end(ilist)); }
 
 		/// clear container and assigns elements from [first, last)
 		template <class SinglePassIterator>
-		void assign(SinglePassIterator first, SinglePassIterator last);
+		auto assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
+		{ return assign_newrecs(first, last); }
+
+		template <class SinglePassRange>
+		auto assign(SinglePassRange && range) -> std::enable_if_t<ext::is_range_v<SinglePassRange>>
+		{ return assign(boost::begin(range), boost::end(range)); }
+
 		void assign(std::initializer_list<value_type> ilist) { assign(std::begin(ilist), std::end(ilist)); }
 
 	protected:
@@ -240,9 +269,9 @@ namespace viewed
 		associative_container_base & operator =(associative_container_base && op) = default;
 	};
 
-	template <class Type, class Traits, class SignalTraits>
+	template <class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	void associative_container_base<Type, Traits, SignalTraits>::upsert_newrecs
+	void associative_container_base<Traits, SignalTraits>::upsert_newrecs
 		(SinglePassIterator first, SinglePassIterator last)
 	{
 		signal_store_type erased, updated, inserted;
@@ -272,9 +301,9 @@ namespace viewed
 		notify_views(erased, updated, inserted);
 	}
 
-	template <class Type, class Traits, class SignalTraits>
+	template <class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	void associative_container_base<Type, Traits, SignalTraits>::assign_newrecs
+	void associative_container_base<Traits, SignalTraits>::assign_newrecs
 		(SinglePassIterator first, SinglePassIterator last)
 	{
 		signal_store_type erased, updated, inserted;
@@ -320,25 +349,26 @@ namespace viewed
 		for (auto * ptr : erased) m_store.erase(key_extractor(*ptr));
 	}
 
-	template <class Type, class Traits, class SignalTraits>
-	void associative_container_base<Type, Traits, SignalTraits>::erase_from_views(const_iterator first, const_iterator last)
+	template <class Traits, class SignalTraits>
+	void associative_container_base<Traits, SignalTraits>::erase_from_views(const_iterator first, const_iterator last)
 	{
 		signal_store_type todel;
+		ext::try_reserve(todel, first, last);
 		std::transform(first, last, std::back_inserter(todel), get_pointer);
 
 		auto rawRange = signal_traits::make_range(todel.data(), todel.data() + todel.size());
 		m_erase_signal(rawRange);
 	}
 
-	template <class Type, class Traits, class SignalTraits>
-	void associative_container_base<Type, Traits, SignalTraits>::clear()
+	template <class Traits, class SignalTraits>
+	void associative_container_base<Traits, SignalTraits>::clear()
 	{
 		m_clear_signal();
 		m_store.clear();
 	}
 
-	template <class Type, class Traits, class SignalTraits>
-	void associative_container_base<Type, Traits, SignalTraits>::notify_views
+	template <class Traits, class SignalTraits>
+	void associative_container_base<Traits, SignalTraits>::notify_views
 		(signal_store_type & erased, signal_store_type & updated, signal_store_type & inserted)
 	{
 		auto inserted_first = inserted.data();
@@ -373,35 +403,21 @@ namespace viewed
 	}
 
 
-	template <class Type, class Traits, class SignalTraits>
-	auto associative_container_base<Type, Traits, SignalTraits>::erase(const_iterator first, const_iterator last) -> const_iterator
+	template <class Traits, class SignalTraits>
+	auto associative_container_base<Traits, SignalTraits>::erase(const_iterator first, const_iterator last) -> const_iterator
 	{
 		erase_from_views(first, last);
 		return m_store.erase(first, last);
 	}
 
-	template <class Type, class Traits, class SignalTraits>
+	template <class Traits, class SignalTraits>
 	template <class CompatibleKey>
-	auto associative_container_base<Type, Traits, SignalTraits>::erase(const CompatibleKey & key) -> size_type
+	auto associative_container_base<Traits, SignalTraits>::erase(const CompatibleKey & key) -> size_type
 	{
 		const_iterator first, last;
 		std::tie(first, last) = m_store.equal_range(key);
 		auto count = std::distance(first, last);
 		erase(first, last);
 		return count;
-	}
-
-	template <class Type, class Traits, class SignalTraits>
-	template <class SinglePassIterator>
-	inline void associative_container_base<Type, Traits, SignalTraits>::upsert(SinglePassIterator first, SinglePassIterator last)
-	{
-		return upsert_newrecs(first, last);
-	}
-
-	template <class Type, class Traits, class SignalTraits>
-	template <class SinglePassIterator>
-	inline void associative_container_base<Type, Traits, SignalTraits>::assign(SinglePassIterator first, SinglePassIterator last)
-	{
-		return assign_newrecs(first, last);
 	}
 }
