@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <cstddef>
 #include <memory>  // for std::unique_ptr
-#include <utility> // for std::exchange
+#include <utility> // for std::exchange, std::in_place_index, std::in_place_type
 #include <type_traits>
 #include <ext/type_traits.hpp>
 
@@ -20,6 +20,13 @@ namespace viewed
 	/// (only runtime assert checks are made, so you should be careful)
 	template <class ... PointerTypes>
 	class pointer_variant;
+
+	/// thrown by get method
+	class bad_variant_access : public std::exception
+	{
+	public:
+		const char * what() const noexcept { return "bad_variant_access"; }
+	};
 
 	/************************************************************************/
 	/*                      pointer_variant_size                            */
@@ -75,6 +82,7 @@ namespace viewed
 	template <size_t I, class... PointerTypes>
 	struct pointer_variant_alternative<I, pointer_variant<PointerTypes...>>
 	{
+		static_assert(I < sizeof...(PointerTypes), "index out of bounds");
 		using type = boost::mp11::mp_at_c<pointer_variant<PointerTypes...>, I>;
 	};
 
@@ -99,6 +107,13 @@ namespace viewed
 		std::enable_if_t<
 			std::conjunction_v<is_pointer_variant<ext::remove_cvref_t<Variants>>...>,
 			std::invoke_result_t<Visitor, boost::mp11::mp_first<ext::remove_cvref_t<Variants>>...>
+		>;
+
+	template <class ResultType, class Visitor, class ... Variants>
+	constexpr auto visit(Visitor && vis, Variants && ... vars) ->
+		std::enable_if_t<
+			std::conjunction_v<is_pointer_variant<ext::remove_cvref_t<Variants>>...>,
+			ResultType
 		>;
 
 	/************************************************************************/
@@ -151,6 +166,9 @@ namespace viewed
 
 		template <class list, class ptr_type>
 		constexpr auto find_v = boost::mp11::mp_find_if_q<list, boost::mp11::mp_bind<std::is_same, ptr_type, boost::mp11::_1>>::value;
+
+		template <class list, class ptr_type>
+		constexpr auto extactly_once = boost::mp11::mp_count<list, ptr_type>::value == 1;
 	}
 
 	/************************************************************************/
@@ -203,11 +221,23 @@ namespace viewed
 		template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> = 0>
 		pointer_variant(Type * ptr) noexcept;
 
-		template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> = 0>
-		pointer_variant & operator =(Type * ptr) noexcept;
+		template <class T, class Type, std::enable_if_t<pointer_variant_detail::extactly_once<pointer_variant<PointerTypes...>, T>, int> = 0>
+		explicit pointer_variant(std::in_place_type_t<T>, Type * ptr) noexcept;
+
+		template <std::size_t Index, class Type, std::enable_if_t<std::is_convertible_v<Type *, pointer_variant_alternative_t<Index, pointer_variant<PointerTypes...>>>, int> = 0>
+		explicit pointer_variant(std::in_place_index_t<Index>, Type * ptr) noexcept;
 
 		template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> = 0>
 		pointer_variant(std::unique_ptr<Type> ptr) noexcept;
+
+		template <class T, class Type, std::enable_if_t<pointer_variant_detail::extactly_once<pointer_variant<PointerTypes...>, T>, int> = 0>
+		explicit pointer_variant(std::in_place_type_t<T>, std::unique_ptr<Type> ptr) noexcept;
+
+		template <std::size_t Index, class Type, std::enable_if_t<std::is_convertible_v<Type *, pointer_variant_alternative_t<Index, pointer_variant<PointerTypes...>>>, int> = 0>
+		explicit pointer_variant(std::in_place_index_t<Index>, std::unique_ptr<Type> ptr) noexcept;
+
+		template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> = 0>
+		pointer_variant & operator =(Type * ptr) noexcept;
 
 		template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> = 0>
 		pointer_variant & operator =(std::unique_ptr<Type> ptr) noexcept;
@@ -247,7 +277,52 @@ namespace viewed
 
 		m_owning = 0;
 		m_type = idx;
-		m_ptr = pack(ptr);
+		m_ptr = pack(static_cast<result_type>(ptr));
+	}
+
+	template <class ... PointerTypes>
+	template <class T, class Type, std::enable_if_t<pointer_variant_detail::extactly_once<pointer_variant<PointerTypes...>, T>, int> /*= 0*/>
+	inline pointer_variant<PointerTypes...>::pointer_variant(std::in_place_type_t<T>, Type * ptr) noexcept
+	    : pointer_variant(static_cast<T>(ptr))
+	{
+
+	}
+
+	template <class ... PointerTypes>
+	template <std::size_t Index, class Type, std::enable_if_t<std::is_convertible_v<Type *, pointer_variant_alternative_t<Index, pointer_variant<PointerTypes...>>>, int> /*= 0*/>
+	inline pointer_variant<PointerTypes...>::pointer_variant(std::in_place_index_t<Index>, Type * ptr) noexcept
+	{
+		static_assert(Index < boost::mp11::mp_size<self_type>::value, "pointer type not from given type list");
+		using T = pointer_variant_alternative_t<Index, pointer_variant<PointerTypes...>>;
+		assert((reinterpret_cast<std::uintptr_t>(ptr) & PTR_MASK) == 0);
+
+		m_owning = 0;
+		m_type = Index;
+		m_ptr = pack(static_cast<T>(ptr));
+	}
+
+	template <class ... PointerTypes>
+	template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> /*= 0*/>
+	inline pointer_variant<PointerTypes...>::pointer_variant(std::unique_ptr<Type> ptr) noexcept
+		: pointer_variant(ptr.release())
+	{
+		m_owning = 1;
+	}
+
+	template <class ... PointerTypes>
+	template <class T, class Type, std::enable_if_t<pointer_variant_detail::extactly_once<pointer_variant<PointerTypes...>, T>, int> /*= 0*/>
+	inline pointer_variant<PointerTypes...>::pointer_variant(std::in_place_type_t<T> hint, std::unique_ptr<Type> ptr) noexcept
+	    : pointer_variant(hint, ptr.release())
+	{
+		m_owning = 1;
+	}
+
+	template <class ... PointerTypes>
+	template <std::size_t Index, class Type, std::enable_if_t<std::is_convertible_v<Type *, pointer_variant_alternative_t<Index, pointer_variant<PointerTypes...>>>, int> /*= 0*/>
+	inline pointer_variant<PointerTypes...>::pointer_variant(std::in_place_index_t<Index> hint, std::unique_ptr<Type> ptr) noexcept
+	    : pointer_variant(hint, ptr.release())
+	{
+		m_owning = 1;
 	}
 
 	template <class ... PointerTypes>
@@ -262,17 +337,9 @@ namespace viewed
 
 		m_owning = 0;
 		m_type = idx;
-		m_ptr = pack(ptr);
+		m_ptr = pack(static_cast<result_type>(ptr));
 
 		return *this;
-	}
-
-	template <class ... PointerTypes>
-	template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> /*= 0*/>
-	inline pointer_variant<PointerTypes...>::pointer_variant(std::unique_ptr<Type> ptr) noexcept
-		: pointer_variant(ptr.release())
-	{
-		m_owning = 1;
 	}
 
 	template <class ... PointerTypes>
@@ -345,11 +412,21 @@ namespace viewed
 	constexpr inline T get(const pointer_variant<PointerTypes...> & v)
 	{
 		constexpr auto idx = boost::mp11::mp_find<pointer_variant<PointerTypes...>, T>::value;
-		if (v.index() != idx) throw;
+		static_assert(pointer_variant_detail::extactly_once<pointer_variant<PointerTypes...>, T>, "T should occur for exactly once in alternatives");
+		if (v.index() != idx) throw bad_variant_access();
 
 		return static_cast<T>(v.pointer());
 	}
 
+	template <std::size_t Index, class ... Types>
+	constexpr inline auto get(const pointer_variant<Types...> & v) ->
+		pointer_variant_alternative_t<Index, pointer_variant<Types...>>
+	{
+		using T = pointer_variant_alternative_t<Index, pointer_variant<Types...>>;
+		if (v.index() != Index) throw bad_variant_access();
+
+		return static_cast<T>(v.pointer());
+	}
 	/************************************************************************/
 	/*            pointer_variant visit implementation                      */
 	/************************************************************************/
@@ -371,9 +448,8 @@ namespace viewed
 		using mp_from_sequence_variants = boost::mp11::mp_from_sequence<std::make_index_sequence<pointer_variant_size_v<ext::remove_cvref_t<Type>>>>;
 
 
-		template <std::size_t ... Indexes, class Visitor, class ... Variants>
-		inline auto dispatch_function1(std::index_sequence<Indexes...>, Visitor && vis, const Variants & ... args)
-			-> std::invoke_result_t<Visitor, boost::mp11::mp_first<ext::remove_cvref_t<Variants>>...>
+		template <class ResultType, std::size_t ... Indexes, class Visitor, class ... Variants>
+		inline ResultType dispatch_function1(std::index_sequence<Indexes...>, Visitor && vis, const Variants & ... args)
 		{
 			static_assert(sizeof...(Indexes) == sizeof...(Variants));
 
@@ -382,24 +458,23 @@ namespace viewed
 			);
 		}
 
-		template <class Indexes, class Visitor, class ... Variants>
-		inline auto dispatch_function2(Visitor && vis, const Variants & ... args)
-			-> std::invoke_result_t<Visitor, boost::mp11::mp_first<ext::remove_cvref_t<Variants>>...>
+		template <class ResultType, class Indexes, class Visitor, class ... Variants>
+		inline ResultType dispatch_function2(Visitor && vis, const Variants & ... args)
 		{
-			return dispatch_function1(Indexes {}, std::forward<Visitor>(vis), args...);
+			return dispatch_function1<ResultType>(Indexes {}, std::forward<Visitor>(vis), args...);
 		}
 
 
-		template <class Visitor, class Variants, class Indexes>
+		template <class ResultType, class Visitor, class Variants, class Indexes>
 		struct dispatch_table; // undefined
 
-		template <class Visitor, class ... Variants, class ... Indexes>
-		struct dispatch_table<Visitor, boost::mp11::mp_list<Variants...>, boost::mp11::mp_list<Indexes...>>
+		template <class ResultType, class Visitor, class ... Variants, class ... Indexes>
+		struct dispatch_table<ResultType, Visitor, boost::mp11::mp_list<Variants...>, boost::mp11::mp_list<Indexes...>>
 		{
-			using result_type = std::invoke_result_t<Visitor, boost::mp11::mp_first<ext::remove_cvref_t<Variants>>...>;
-			using sig_type = result_type(*)(Visitor &&, const Variants & ...);
+			//using result_type = std::invoke_result_t<Visitor, boost::mp11::mp_first<ext::remove_cvref_t<Variants>>...>;
+			using sig_type = ResultType(*)(Visitor &&, const Variants & ...);
 
-			static constexpr sig_type dispatch_array[] = {&dispatch_function2<Indexes, Visitor, Variants...>...};
+			static constexpr sig_type dispatch_array[] = {&dispatch_function2<ResultType, Indexes, Visitor, Variants...>...};
 		};
 
 		template <class ... Variants>
@@ -419,15 +494,26 @@ namespace viewed
 
 
 	template <class Visitor, class ... Variants>
-	constexpr auto visit(Visitor && vis, Variants && ... vars) ->
+	constexpr inline auto visit(Visitor && vis, Variants && ... vars) ->
 		std::enable_if_t<
 			std::conjunction_v<is_pointer_variant<ext::remove_cvref_t<Variants>>...>,
 			std::invoke_result_t<Visitor, boost::mp11::mp_first<ext::remove_cvref_t<Variants>>...>
 		>
 	{
+		using result_type = std::invoke_result_t<Visitor, boost::mp11::mp_first<ext::remove_cvref_t<Variants>>...>;
+		return visit<result_type>(std::forward<Visitor>(vis), std::forward<Variants>(vars)...);
+	}
+
+	template <class ResultType, class Visitor, class ... Variants>
+	constexpr auto visit(Visitor && vis, Variants && ... vars) ->
+		std::enable_if_t<
+			std::conjunction_v<is_pointer_variant<ext::remove_cvref_t<Variants>>...>,
+			ResultType
+		>
+	{
 		using namespace pointer_variant_detail;
 		using namespace boost::mp11;
-		
+
 		using list_of_sequence_lists = mp_product<
 			join_index_constants_t,
 			mp_from_sequence_variants<Variants>...
@@ -435,7 +521,7 @@ namespace viewed
 		>;
 
 		const auto dispatch_idx = dispatch_index(vars...);
-		constexpr auto & dispatch_array = dispatch_table<Visitor, mp_list<ext::remove_cvref_t<Variants>...>, list_of_sequence_lists>::dispatch_array;
+		constexpr auto & dispatch_array = dispatch_table<ResultType, Visitor, mp_list<ext::remove_cvref_t<Variants>...>, list_of_sequence_lists>::dispatch_array;
 		return dispatch_array[dispatch_idx](std::forward<Visitor>(vis), std::forward<Variants>(vars)...);
 	}
 
