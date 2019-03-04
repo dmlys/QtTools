@@ -16,8 +16,8 @@ namespace viewed
 	/// null sorter for views
 	struct null_sorter
 	{
-		template <class Type>
-		bool operator()(const Type & v1, const Type & v2) const noexcept { return &v1 < &v2; }
+		template <class Type1, class Type2>
+		bool operator()(const Type1 & v1, const Type2 & v2) const noexcept { return &v1 < &v2; }
 
 		explicit operator bool() const noexcept { return false; }
 	};

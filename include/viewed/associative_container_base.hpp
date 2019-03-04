@@ -353,7 +353,6 @@ namespace viewed
 	void associative_container_base<Traits, SignalTraits>::erase_from_views(const_iterator first, const_iterator last)
 	{
 		signal_store_type todel;
-		ext::try_reserve(todel, first, last);
 		std::transform(first, last, std::back_inserter(todel), get_pointer);
 
 		auto rawRange = signal_traits::make_range(todel.data(), todel.data() + todel.size());

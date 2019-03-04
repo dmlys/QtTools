@@ -172,7 +172,7 @@ namespace viewed
 		struct get_name_type
 		{
 			using result_type = pathview_type;
-			decltype(auto) operator()(const path_type & path) const { return traits_type::get_name(path); }
+			//decltype(auto) operator()(const path_type & path) const { return traits_type::get_name(path); }
 			decltype(auto) operator()(const leaf_type & leaf) const { return traits_type::get_name(leaf); }
 			decltype(auto) operator()(const page_type & page) const { return traits_type::get_name(static_cast<const node_type &>(page)); }
 			decltype(auto) operator()(const value_ptr & val)  const { return viewed::visit(*this, val); }
@@ -241,7 +241,7 @@ namespace viewed
 			result_type operator()(const page_type & page) const { return page.children; }
 			result_type operator()(const value_ptr & val)  const { return viewed::visit(*this, val); }
 
-			// important, viewed::visit(*this, val) depends on them, otherwise infinite recursion would occur
+			// important, viewed::visit(*this, val) depends on this, otherwise infinite recursion would occur
 			template <class Type>
 			result_type operator()(const Type * ptr) const { return operator()(*ptr); }
 		};
@@ -253,7 +253,7 @@ namespace viewed
 			result_type operator()(const page_type & page) const { return page.nvisible; }
 			result_type operator()(const value_ptr & val)  const { return viewed::visit(*this, val); }
 
-			// important, viewed::visit(*this, val) depends on them, otherwise infinite recursion would occur
+			// important, viewed::visit(*this, val) depends on this, otherwise infinite recursion would occur
 			template <class Type>
 			result_type operator()(const Type * ptr) const { return operator()(*ptr); }
 		};
@@ -311,45 +311,9 @@ namespace viewed
 		};
 
 
-		template <class Pred>
-		struct value_ptr_filter_type
-		{
-			using indirect_type = typename viewed::make_indirect_pred_type<Pred>::type;
-			indirect_type pred;
-
-			value_ptr_filter_type(Pred pred)
-				: pred(viewed::make_indirect_fun(std::move(pred))) {}
-
-			auto operator()(const value_ptr & v) const
-			{
-				return get_children_count(v) > 0 or viewed::visit(pred, v);
-			}
-
-			explicit operator bool() const noexcept
-			{
-				return viewed::active(pred);
-			}
-		};
-
-		template <class Pred>
-		struct value_ptr_sorter_type
-		{
-			using indirect_type = typename viewed::make_indirect_pred_type<Pred>::type;
-			indirect_type pred;
-
-			value_ptr_sorter_type(Pred pred)
-				: pred(viewed::make_indirect_fun(std::move(pred))) {}
-
-			auto operator()(const value_ptr & v1, const value_ptr & v2) const
-			{
-				return viewed::visit(pred, v1, v2);
-			}
-
-			explicit operator bool() const noexcept
-			{
-				return viewed::active(pred);
-			}
-		};
+		// filter, sort helpers. defined below, outside of class
+		template <class Pred> struct value_ptr_filter_type;
+		template <class Pred> struct value_ptr_sorter_type;
 
 	protected:
 		// those are sort of member functions, but functors
@@ -498,6 +462,82 @@ namespace viewed
 		sftree_facade_qtbase(traits_type traits, QObject * parent = nullptr) : model_base(parent), traits_type(std::move(traits)) {}
 		virtual ~sftree_facade_qtbase() = default;
 	};
+
+
+	/************************************************************************/
+	/*                  value_ptr_filter_type definition                    */
+	/************************************************************************/
+	template <class Traits, class ModelBase>
+	template <class Pred>
+	struct sftree_facade_qtbase<Traits, ModelBase>::value_ptr_filter_type
+	{
+		// if node and leaf are the same types - we should provide a hint to predicate what argument is: LEAF or PAGE
+		// but only if Predicate accepts those hints
+		static constexpr auto HintedCall = std::is_same_v<leaf_type, node_type> and std::is_invocable_v<Pred, const leaf_type &, std::integer_sequence<unsigned, LEAF>>;
+		using pred_type = std::conditional_t<HintedCall, Pred, typename viewed::make_indirect_pred_type<Pred>::type>;
+
+		pred_type pred;
+
+		value_ptr_filter_type(Pred pred) : pred(std::move(pred)) {}
+		bool operator()(const value_ptr & v) const;
+	};
+
+	template <class Traits, class ModelBase>
+	template <class Pred>
+	bool sftree_facade_qtbase<Traits, ModelBase>::value_ptr_filter_type<Pred>::operator()(const value_ptr & v) const
+	{
+		if constexpr(not HintedCall)
+			return get_children_count(v) > 0 or viewed::visit(pred, v);
+		else
+		{
+			// if node and leaf are the same types - we should provide a hint to predicate what argument is: LEAF or PAGE
+			switch (v.index())
+			{
+				case 0: { auto * page = static_cast<page_type *>(v.pointer()); return page->nvisible > 0 or pred(*page, std::integer_sequence<unsigned, PAGE>()); }
+				case 1: return pred(*static_cast<leaf_type *>(v.pointer()), std::integer_sequence<unsigned, LEAF>());
+				default: EXT_UNREACHABLE();
+			}
+		}
+	}
+
+	/************************************************************************/
+	/*                  value_ptr_sorter_type definition                    */
+	/************************************************************************/
+	template <class Traits, class ModelBase>
+	template <class Pred>
+	struct sftree_facade_qtbase<Traits, ModelBase>::value_ptr_sorter_type
+	{
+		// if node and leaf are the same types - we should provide a hint to predicate what arguments are: LEAF or PAGE
+		// but only if Predicate accepts those hints
+		static constexpr auto HintedCall = std::is_same_v<leaf_type, node_type> and std::is_invocable_v<Pred, const leaf_type &, const leaf_type &, std::integer_sequence<unsigned, LEAF, LEAF>>;
+		using pred_type = std::conditional_t<HintedCall, Pred, typename viewed::make_indirect_pred_type<Pred>::type>;
+		pred_type pred;
+
+		value_ptr_sorter_type(Pred pred) : pred(std::move(pred)) {}
+
+		bool operator()(const value_ptr & v1, const value_ptr & v2) const;
+	};
+
+	template <class Traits, class ModelBase>
+	template <class Pred>
+	bool sftree_facade_qtbase<Traits, ModelBase>::value_ptr_sorter_type<Pred>::operator()(const value_ptr & v1, const value_ptr & v2) const
+	{
+		if constexpr (not HintedCall)
+			return viewed::visit(pred, v1, v2);
+		else
+		{
+			// if node and leaf are the same types - we should provide a hint to predicate what arguments are: LEAF or PAGE
+			auto type = v1.index() * 2 + v2.index();
+			switch (type)
+			{
+				case 0: return pred(*static_cast<const page_type *>(v1.pointer()), *static_cast<const page_type *>(v2.pointer()), std::integer_sequence<unsigned, PAGE, PAGE>());
+				case 1: return pred(*static_cast<const page_type *>(v1.pointer()), *static_cast<const leaf_type *>(v2.pointer()), std::integer_sequence<unsigned, PAGE, LEAF>());
+				case 2: return pred(*static_cast<const leaf_type *>(v1.pointer()), *static_cast<const page_type *>(v2.pointer()), std::integer_sequence<unsigned, LEAF, PAGE>());
+				case 3: return pred(*static_cast<const leaf_type *>(v1.pointer()), *static_cast<const leaf_type *>(v2.pointer()), std::integer_sequence<unsigned, LEAF, LEAF>());
+				default: EXT_UNREACHABLE();
+			}
+		}
+	}
 
 	/************************************************************************/
 	/*                  Methods implementations                             */
@@ -651,7 +691,8 @@ namespace viewed
 	{
 		if (first == last) return;
 
-		int ncols = this->columnCount(parent);
+		auto * that = static_cast<const QAbstractItemModel *>(this);
+		int ncols = that->columnCount(parent);
 		for (; first != last; ++first)
 		{
 			// lower index on top, higher on bottom
