@@ -105,14 +105,14 @@ namespace viewed
 	///     static auto get_path(const leaf_type & leaf) -> path_type/pathview_type/const path_type &;
 	///       returns whole path from leaf, usually something like: return leaf.filepath
 	///
-	///                                                                                                PAGE/LEAF      newcontext   leaf/node name
+	///                                                                                                PAGE/LEAF     leaf/node name   newcontext
 	///     auto parse_path(const pathview_type & path, const pathview_type & context) -> std::tuple<std::uintptr_t, pathview_type, pathview_type>;
 	///       parses given path under given context, where:
 	///         path    - path from leaf_type acquired via get_path call
 	///         context - is a parent path, at start - empty, but then it will be one returned by this function
 	///       returns if it's LEAF/PAGE:
-	///         if it's PAGE - also returns node name and newpath(old path + node name)
-	///         if it's LEAF - returns leaf name, value of newpath is unused
+	///         if it's PAGE - also returns node name and newcontext/newpath(old path + node name)
+	///         if it's LEAF - returns leaf name, value of newcontext is unused
 	///
 	///     bool is_child(const pathview_type & path, const pathview_type & context, const pathview_type & node_name);
 	///       returns if leaf path(acquired via get_path from leaf_type) is a logically a child of node with given node_name and under given context.
@@ -661,7 +661,7 @@ namespace viewed
 
 		for (;;)
 		{
-			std::tie(type, curpath, name) = parse_path(path, curpath);
+			std::tie(type, name, curpath) = parse_path(path, curpath);
 
 			auto & children = cur_page->children;
 			auto & seq_view = children.template get<by_seq>();
@@ -1113,7 +1113,7 @@ namespace viewed
 		{
 			// with current path parse each element:
 			auto && item_ptr = *ctx.first;
-			auto [type, newpath, name] = parse_path(this->get_path(*item_ptr), ctx.path);
+			auto [type, name, newpath] = parse_path(this->get_path(*item_ptr), ctx.path);
 			if (type == LEAF)
 			{
 				// if it's leaf: add to children
@@ -1213,7 +1213,7 @@ namespace viewed
 		{
 			auto && item = *ctx.erased_first;
 			std::uintptr_t type;
-			std::tie(type, ctx.erased_path, ctx.erased_name) = parse_path(this->get_path(*item), ctx.path);
+			std::tie(type, ctx.erased_name, ctx.erased_path) = parse_path(this->get_path(*item), ctx.path);
 			if (type == PAGE) return std::tie(ctx.erased_name, ctx.erased_path);
 
 			auto it = container.find(ctx.erased_name);
@@ -1248,7 +1248,7 @@ namespace viewed
 		{
 			auto && item = *ctx.updated_first;
 			std::uintptr_t type;
-			std::tie(type, ctx.updated_path, ctx.updated_name) = parse_path(this->get_path(*item), ctx.path);
+			std::tie(type, ctx.updated_name, ctx.updated_path) = parse_path(this->get_path(*item), ctx.path);
 			if (type == PAGE) return std::tie(ctx.updated_name, ctx.updated_path);
 
 			auto it = container.find(ctx.updated_name);
@@ -1284,7 +1284,7 @@ namespace viewed
 		{
 			auto && item = *ctx.inserted_first;
 			std::uintptr_t type;
-			std::tie(type, ctx.inserted_path, ctx.inserted_name) = parse_path(this->get_path(*item), ctx.path);
+			std::tie(type, ctx.inserted_name, ctx.inserted_path) = parse_path(this->get_path(*item), ctx.path);
 			if (type == PAGE) return std::tie(ctx.inserted_name, ctx.inserted_path);
 
 			bool inserted;
