@@ -357,8 +357,10 @@ namespace viewed
 		page_type * get_page(const QModelIndex & index) const;
 		/// returns leaf/node pointed by index
 		const value_ptr & get_element_ptr(const QModelIndex & index) const;
-		/// find element by given path, if no such element is found - invalid index returned
+		/// find element by given path starting from root elements, if no such element is found - invalid index returned
 		virtual QModelIndex find_element(const pathview_type & path) const;
+		/// find element by given path starting from given root, if no such element is found - invalid index returned
+		virtual QModelIndex find_element(const QModelIndex & root, const pathview_type & path) const;
 
 	public:
 		virtual int rowCount(const QModelIndex & parent) const override;
@@ -582,13 +584,13 @@ namespace viewed
 	template <class Traits, class ModelBase>
 	inline auto sftree_facade_qtbase<Traits, ModelBase>::get_page(const QModelIndex & index) const -> page_type *
 	{
+		assert(index.isValid());
 		return static_cast<page_type *>(index.internalPointer());
 	}
 
 	template <class Traits, class ModelBase>
 	auto sftree_facade_qtbase<Traits, ModelBase>::get_element_ptr(const QModelIndex & index) const -> const value_ptr &
 	{
-		assert(index.isValid());
 		auto * page = get_page(index);
 		assert(page);
 
@@ -652,10 +654,27 @@ namespace viewed
 	}
 
 	template <class Traits, class ModelBase>
-	QModelIndex sftree_facade_qtbase<Traits, ModelBase>::find_element(const pathview_type & path) const
+	inline QModelIndex sftree_facade_qtbase<Traits, ModelBase>::find_element(const pathview_type & path) const
+	{
+		return find_element(model_helper::invalid_index, path);
+	}
+
+	template <class Traits, class ModelBase>
+	QModelIndex sftree_facade_qtbase<Traits, ModelBase>::find_element(const QModelIndex & root, const pathview_type & path) const
 	{
 		std::uintptr_t type;
-		const page_type * cur_page = &m_root;
+		const page_type * cur_page;
+		if (not root.isValid())
+			cur_page = &m_root;
+		else
+		{
+			const auto & val_ptr = get_element_ptr(root);
+			if (val_ptr.index() == LEAF)
+				return QModelIndex(); // leafs do not have children
+			else
+				cur_page = static_cast<const page_type *>(val_ptr.pointer());
+		}
+
 		pathview_type curpath = ms_empty_path;
 		pathview_type name;
 
