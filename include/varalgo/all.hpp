@@ -1,7 +1,7 @@
 #pragma once
 
 /// wrappers of standard algorithms,
-/// those wrappers allows to pass boost::variant<Pred1, Pred2, ...> in place of sort predicate
+/// those wrappers allows to pass std::variant<Pred1, Pred2, ...> in place of sort predicate
 /// that variant will be dispatched and algorithm will be called with actual predicate
 
 #include <varalgo/sorting_algo.hpp>
