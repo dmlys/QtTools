@@ -43,6 +43,10 @@ namespace viewed
 {
 	inline namespace sftree_constants
 	{
+		// NODE and PAGE are same.
+		// NODE is public type, while PAGE is internal type
+
+		constexpr unsigned NODE = 0;
 		constexpr unsigned PAGE = 0;
 		constexpr unsigned LEAF = 1;
 	}
@@ -154,32 +158,36 @@ namespace viewed
 		using typename traits_type::sort_pred_type;
 		using typename traits_type::filter_pred_type;
 
+	public:
+		/// value_ptr is sort of value_type, variant of leaf or node
+		//using value_ptr = viewed::pointer_variant<const node_type *, const leaf_type *>;
+
 	protected:
 		using traits_type::parse_path;
 		using traits_type::is_child;
 
-	public:
+	protected:
 		struct page_type;
 
-		/// value_ptr is element of that type, sort of value_type,
-		/// it is what derived class and even clients can work with, some function will provide values of this type
-		using value_ptr = viewed::pointer_variant<const page_type *, const leaf_type *>;
-
-	public:
-		using value_ptr_vector   = std::vector<const value_ptr *>;
-		using value_ptr_iterator = typename value_ptr_vector::iterator;
+		/// internal_value_ptr is variant of page or leaf pointers,
+		/// it is what this and derived class can work with, some function will provide values of this type
+		using internal_value_ptr  = viewed::pointer_variant<const page_type *, const leaf_type *>;
+		/// here and further i stands for internal
+		using ivalue_ptr          = internal_value_ptr;
+		using ivalue_ptr_vector   = std::vector<const ivalue_ptr *>;
+		using ivalue_ptr_iterator = typename ivalue_ptr_vector::iterator;
 
 		struct get_name_type
 		{
 			using result_type = pathview_type;
 			//decltype(auto) operator()(const path_type & path) const { return traits_type::get_name(path); }
 			decltype(auto) operator()(const leaf_type & leaf) const { return traits_type::get_name(leaf); }
-			decltype(auto) operator()(const page_type & page) const { return traits_type::get_name(static_cast<const node_type &>(page)); }
-			decltype(auto) operator()(const value_ptr & val)  const { return viewed::visit(*this, val); }
+			decltype(auto) operator()(const page_type & page) const { return traits_type::get_name(page.node); }
+			decltype(auto) operator()(const ivalue_ptr & val) const { return viewed::visit(*this, val); }
 
 			// important, viewed::visit(*this, val) depends on them, otherwise infinite recursion would occur
 			decltype(auto) operator()(const leaf_type * leaf) const { return traits_type::get_name(*leaf); }
-			decltype(auto) operator()(const page_type * page) const { return traits_type::get_name(*page); }
+			decltype(auto) operator()(const page_type * page) const { return traits_type::get_name(page->node); }
 		};
 
 		struct path_group_pred_type
@@ -197,8 +205,8 @@ namespace viewed
 			operator()(Pointer1 && p1, Pointer2 && p2) const noexcept { return path_less(traits_type::get_path(*p2), traits_type::get_path(*p1)); }
 		};
 
-		using value_container = boost::multi_index_container<
-			value_ptr,
+		using ivalue_container = boost::multi_index_container<
+			ivalue_ptr,
 			boost::multi_index::indexed_by<
 				boost::multi_index::hashed_unique<get_name_type, path_hash_type, path_equal_to_type>,
 				boost::multi_index::random_access<>
@@ -208,8 +216,8 @@ namespace viewed
 		static constexpr unsigned by_code = 0;
 		static constexpr unsigned by_seq  = 1;
 
-		using code_view_type = typename value_container::template nth_index<by_code>::type;
-		using seq_view_type  = typename value_container::template nth_index<by_seq> ::type;
+		using code_view_type = typename ivalue_container::template nth_index<by_code>::type;
+		using seq_view_type  = typename ivalue_container::template nth_index<by_seq> ::type;
 
 		// Leafs are provided from external sources, some form of assign method implemented by derived class
 		// nodes are created by this class, while node itself is defined by traits and calculated by derived class,
@@ -221,25 +229,20 @@ namespace viewed
 		// Children container is partitioned is such way that first comes visible elements, after them shadowed - those who does not pass filter criteria.
 		// Whenever filter criteria changes, or elements are changed - elements are moved to/from shadow/visible part according to changes.
 
-		struct page_type_base
+		struct page_type
 		{
-			page_type *     parent = nullptr; // our parent
-			std::size_t     nvisible = 0;     // number of visible elements in container, see above
-			value_container children;         // our children
+			page_type *      parent = nullptr; // our parent
+			std::size_t      nvisible = 0;     // number of visible elements in container, see above
+			ivalue_container children;         // our children
+			node_type        node;             // node data
 		};
-
-		struct page_type : page_type_base, traits_type::node_type
-		{
-
-		};
-
 
 		struct get_children_type
 		{
-			using result_type = const value_container &;
+			using result_type = const ivalue_container &;
 			result_type operator()(const leaf_type & leaf) const { return ms_empty_container; }
 			result_type operator()(const page_type & page) const { return page.children; }
-			result_type operator()(const value_ptr & val)  const { return viewed::visit(*this, val); }
+			result_type operator()(const ivalue_ptr & val) const { return viewed::visit(*this, val); }
 
 			// important, viewed::visit(*this, val) depends on this, otherwise infinite recursion would occur
 			template <class Type>
@@ -251,7 +254,7 @@ namespace viewed
 			using result_type = std::size_t;
 			result_type operator()(const leaf_type & leaf) const { return 0; }
 			result_type operator()(const page_type & page) const { return page.nvisible; }
-			result_type operator()(const value_ptr & val)  const { return viewed::visit(*this, val); }
+			result_type operator()(const ivalue_ptr & val) const { return viewed::visit(*this, val); }
 
 			// important, viewed::visit(*this, val) depends on this, otherwise infinite recursion would occur
 			template <class Type>
@@ -262,7 +265,7 @@ namespace viewed
 		/// context used for recursive tree resorting
 		struct resort_context
 		{
-			value_ptr_vector * vptr_array;                                       // helper value_ptr ptr vector, reused to minimize heap allocations
+			ivalue_ptr_vector * vptr_array;                                      // helper value_ptr ptr vector, reused to minimize heap allocations
 			int_vector * index_array, * inverse_array;                           // helper index vectors, reused to minimize heap allocations
 			QModelIndexList::const_iterator model_index_first, model_index_last; // persistent indexes that should be recalculated
 		};
@@ -270,7 +273,7 @@ namespace viewed
 		/// context used for recursive tree refiltering
 		struct refilter_context
 		{
-			value_ptr_vector * vptr_array;                                       // helper value_ptr ptr vector, reused to minimize heap allocations
+			ivalue_ptr_vector * vptr_array;                                      // helper value_ptr ptr vector, reused to minimize heap allocations
 			int_vector * index_array, *inverse_array;                            // helper index vectors, reused to minimize heap allocations
 			QModelIndexList::const_iterator model_index_first, model_index_last; // persistent indexes that should be recalculated
 		};
@@ -297,7 +300,7 @@ namespace viewed
 			pathview_type inserted_path, updated_path, erased_path;
 			pathview_type inserted_name, updated_name, erased_name;
 
-			value_ptr_vector * vptr_array;
+			ivalue_ptr_vector * vptr_array;
 			int_vector * index_array, *inverse_array;
 			QModelIndexList::const_iterator model_index_first, model_index_last;
 		};
@@ -307,13 +310,16 @@ namespace viewed
 		{
 			RandomAccessIterator first, last;
 			pathview_type path;
-			value_ptr_vector * vptr_array;
+			ivalue_ptr_vector * vptr_array;
 		};
 
+	protected:
+		// allows uniform access to leaf/node, see more description below at node_accessor_type definition
+		struct node_accessor_type;
 
 		// filter, sort helpers. defined below, outside of class
-		template <class Pred> struct value_ptr_filter_type;
-		template <class Pred> struct value_ptr_sorter_type;
+		template <class Pred> struct ivalue_ptr_filter_type;
+		template <class Pred> struct ivalue_ptr_sorter_type;
 
 	protected:
 		// those are sort of member functions, but functors
@@ -326,11 +332,12 @@ namespace viewed
 		static constexpr get_children_count_type get_children_count {};
 		static constexpr path_group_pred_type    path_group_pred {};
 
+		static constexpr node_accessor_type node_accessor {};
 		static constexpr auto make_ref = [](auto * ptr) { return std::ref(*ptr); };
 
 	protected:
-		static const pathview_type    ms_empty_path;
-		static const value_container  ms_empty_container;
+		static const pathview_type     ms_empty_path;
+		static const ivalue_container  ms_empty_container;
 
 
 	protected:
@@ -341,6 +348,7 @@ namespace viewed
 		sort_pred_type m_sort_pred;
 		filter_pred_type m_filter_pred;
 
+
 	protected:
 		template <class Functor>
 		static void for_each_child_page(page_type & page, Functor && func);
@@ -348,24 +356,24 @@ namespace viewed
 		template <class RandomAccessIterator>
 		static void group_by_paths(RandomAccessIterator first, RandomAccessIterator last);
 
-	protected:
+	protected: // core QAbstractItemModel functionality implementation
 		/// creates index for element with row, column in given page, this is just more typed version of QAbstractItemModel::createIndex
 		QModelIndex create_index(int row, int column, page_type * ptr) const;
-
-	public: // core QAbstractItemModel functionality implementation
 		/// returns page holding leaf/node pointed by index(or just parent node in other words)
 		page_type * get_page(const QModelIndex & index) const;
-		/// returns leaf/node pointed by index
-		const value_ptr & get_element_ptr(const QModelIndex & index) const;
+		/// returns leaf/page pointed by index
+		const ivalue_ptr & get_ielement_ptr(const QModelIndex & index) const;
+
+	public:
 		/// find element by given path starting from root elements, if no such element is found - invalid index returned
 		virtual QModelIndex find_element(const pathview_type & path) const;
 		/// find element by given path starting from given root, if no such element is found - invalid index returned
 		virtual QModelIndex find_element(const QModelIndex & root, const pathview_type & path) const;
 
 	public:
-		virtual int rowCount(const QModelIndex & parent) const override;
+		virtual int rowCount(const QModelIndex & parent = model_helper::invalid_index) const override;
 		virtual QModelIndex parent(const QModelIndex & index) const override;
-		virtual QModelIndex index(int row, int column, const QModelIndex & parent) const override;
+		virtual QModelIndex index(int row, int column, const QModelIndex & parent = model_helper::invalid_index) const override;
 
 	protected:
 		/// recalculates page on some changes, updates/inserts/erases,
@@ -392,7 +400,7 @@ namespace viewed
 		/// first, middle, last - is are one range, as in std::inplace_merge
 		/// if resort_old is true it also resorts [first, middle), otherwise it's assumed it's sorted
 		virtual void merge_newdata(
-			value_ptr_iterator first, value_ptr_iterator middle, value_ptr_iterator last,
+			ivalue_ptr_iterator first, ivalue_ptr_iterator middle, ivalue_ptr_iterator last,
 			bool resort_old = true);
 		
 		/// merges m_store's [middle, last) into [first, last) according to m_sort_pred. stable.
@@ -401,15 +409,15 @@ namespace viewed
 		/// 
 		/// range [ifirst, imiddle, ilast) must be permuted the same way as range [first, middle, last)
 		virtual void merge_newdata(
-			value_ptr_iterator first, value_ptr_iterator middle, value_ptr_iterator last,
+			ivalue_ptr_iterator first, ivalue_ptr_iterator middle, ivalue_ptr_iterator last,
 			int_vector::iterator ifirst, int_vector::iterator imiddle, int_vector::iterator ilast,
 			bool resort_old = true);
 		
 		/// sorts m_store's [first; last) with m_sort_pred, stable sort
-		virtual void stable_sort(value_ptr_iterator first, value_ptr_iterator last);
+		virtual void stable_sort(ivalue_ptr_iterator first, ivalue_ptr_iterator last);
 		/// sorts m_store's [first; last) with m_sort_pred, stable sort
 		/// range [ifirst; ilast) must be permuted the same way as range [first; last)
-		virtual void stable_sort(value_ptr_iterator first, value_ptr_iterator last,
+		virtual void stable_sort(ivalue_ptr_iterator first, ivalue_ptr_iterator last,
 		                         int_vector::iterator ifirst, int_vector::iterator ilast);
 
 		/// sorts m_store's [first; last) with m_sort_pred, stable sort
@@ -465,13 +473,54 @@ namespace viewed
 		virtual ~sftree_facade_qtbase() = default;
 	};
 
+	/************************************************************************/
+	/*                   node_accessor_type definition                     */
+	/************************************************************************/
+
+	/// special predicate proxy that passes arguments as is, except for page references/pointers:
+	/// those are translated to node: return page.node | return &page->node
+	///
+	/// consider you have same type leaf/node, or their members have same name:
+	///  now you want to write something like: viewed::visit([](auto * item) { return item->something; }, ivalue_ptr var);
+	///  sadly it will not work, because ivalue_ptr - variant of leaf and page, and page holds node as node member.
+	///
+	/// with this class you can write:
+	///  viewed::visit(node_accessor([](auto * item) { item->something; }, ivalue_ptr var);
+	template <class Traits, class ModelBase>
+	struct sftree_facade_qtbase<Traits, ModelBase>::node_accessor_type
+	{
+		template <class Arg>
+		static decltype(auto) unwrap(Arg && arg) noexcept { return std::forward<Arg>(arg); }
+
+		static const node_type * unwrap(const page_type * page) noexcept { return &page->node; }
+		static       node_type * unwrap(      page_type * page) noexcept { return &page->node; }
+		static const node_type & unwrap(const page_type & page) noexcept { return page.node;   }
+		static       node_type & unwrap(      page_type & page) noexcept { return page.node;   }
+
+		// direct call form
+		template <class Pred, class ... Args>
+		auto operator()(Pred && pred, Args && ... args) const
+		{
+			return std::forward<Pred>(pred)(unwrap(std::forward<Args>(args))...);
+		}
+
+		// predicate wrapper form
+		template <class Pred>
+		auto operator()(Pred && pred) const
+		{
+			return [pred = std::forward<Pred>(pred)](auto && ... args) mutable -> decltype(auto)
+			{
+				return std::move(pred)(unwrap(std::forward<decltype(args)>(args))...);
+			};
+		}
+	};
 
 	/************************************************************************/
 	/*                  value_ptr_filter_type definition                    */
 	/************************************************************************/
 	template <class Traits, class ModelBase>
 	template <class Pred>
-	struct sftree_facade_qtbase<Traits, ModelBase>::value_ptr_filter_type
+	struct sftree_facade_qtbase<Traits, ModelBase>::ivalue_ptr_filter_type
 	{
 		// if node and leaf are the same types - we should provide a hint to predicate what argument is: LEAF or PAGE
 		// but only if Predicate accepts those hints
@@ -480,22 +529,22 @@ namespace viewed
 
 		pred_type pred;
 
-		value_ptr_filter_type(Pred pred) : pred(std::move(pred)) {}
-		bool operator()(const value_ptr & v) const;
+		ivalue_ptr_filter_type(Pred pred) : pred(std::move(pred)) {}
+		bool operator()(const ivalue_ptr & v) const;
 	};
 
 	template <class Traits, class ModelBase>
 	template <class Pred>
-	bool sftree_facade_qtbase<Traits, ModelBase>::value_ptr_filter_type<Pred>::operator()(const value_ptr & v) const
+	bool sftree_facade_qtbase<Traits, ModelBase>::ivalue_ptr_filter_type<Pred>::operator()(const ivalue_ptr & v) const
 	{
 		if constexpr(not HintedCall)
-			return get_children_count(v) > 0 or viewed::visit(pred, v);
+			return get_children_count(v) > 0 or viewed::visit(node_accessor(pred), v);
 		else
 		{
 			// if node and leaf are the same types - we should provide a hint to predicate what argument is: LEAF or PAGE
 			switch (v.index())
 			{
-				case 0: { auto * page = static_cast<page_type *>(v.pointer()); return page->nvisible > 0 or pred(*page, std::integer_sequence<unsigned, PAGE>()); }
+				case 0: { auto * page = static_cast<page_type *>(v.pointer()); return page->nvisible > 0 or pred(page->node, std::integer_sequence<unsigned, PAGE>()); }
 				case 1: return pred(*static_cast<leaf_type *>(v.pointer()), std::integer_sequence<unsigned, LEAF>());
 				default: EXT_UNREACHABLE();
 			}
@@ -507,7 +556,7 @@ namespace viewed
 	/************************************************************************/
 	template <class Traits, class ModelBase>
 	template <class Pred>
-	struct sftree_facade_qtbase<Traits, ModelBase>::value_ptr_sorter_type
+	struct sftree_facade_qtbase<Traits, ModelBase>::ivalue_ptr_sorter_type
 	{
 		// if node and leaf are the same types - we should provide a hint to predicate what arguments are: LEAF or PAGE
 		// but only if Predicate accepts those hints
@@ -515,27 +564,27 @@ namespace viewed
 		using pred_type = std::conditional_t<HintedCall, Pred, typename viewed::make_indirect_pred_type<Pred>::type>;
 		pred_type pred;
 
-		value_ptr_sorter_type(Pred pred) : pred(std::move(pred)) {}
+		ivalue_ptr_sorter_type(Pred pred) : pred(std::move(pred)) {}
 
-		bool operator()(const value_ptr & v1, const value_ptr & v2) const;
+		bool operator()(const ivalue_ptr & v1, const ivalue_ptr & v2) const;
 	};
 
 	template <class Traits, class ModelBase>
 	template <class Pred>
-	bool sftree_facade_qtbase<Traits, ModelBase>::value_ptr_sorter_type<Pred>::operator()(const value_ptr & v1, const value_ptr & v2) const
+	bool sftree_facade_qtbase<Traits, ModelBase>::ivalue_ptr_sorter_type<Pred>::operator()(const ivalue_ptr & v1, const ivalue_ptr & v2) const
 	{
 		if constexpr (not HintedCall)
-			return viewed::visit(pred, v1, v2);
+			return viewed::visit(node_accessor(pred), v1, v2);
 		else
 		{
 			// if node and leaf are the same types - we should provide a hint to predicate what arguments are: LEAF or PAGE
 			auto type = v1.index() * 2 + v2.index();
 			switch (type)
 			{
-				case 0: return pred(*static_cast<const page_type *>(v1.pointer()), *static_cast<const page_type *>(v2.pointer()), std::integer_sequence<unsigned, PAGE, PAGE>());
-				case 1: return pred(*static_cast<const page_type *>(v1.pointer()), *static_cast<const leaf_type *>(v2.pointer()), std::integer_sequence<unsigned, PAGE, LEAF>());
-				case 2: return pred(*static_cast<const leaf_type *>(v1.pointer()), *static_cast<const page_type *>(v2.pointer()), std::integer_sequence<unsigned, LEAF, PAGE>());
-				case 3: return pred(*static_cast<const leaf_type *>(v1.pointer()), *static_cast<const leaf_type *>(v2.pointer()), std::integer_sequence<unsigned, LEAF, LEAF>());
+				case 0: return node_accessor(pred, *static_cast<const page_type *>(v1.pointer()), *static_cast<const page_type *>(v2.pointer()), std::integer_sequence<unsigned, PAGE, PAGE>());
+				case 1: return node_accessor(pred, *static_cast<const page_type *>(v1.pointer()), *static_cast<const leaf_type *>(v2.pointer()), std::integer_sequence<unsigned, PAGE, LEAF>());
+				case 2: return node_accessor(pred, *static_cast<const leaf_type *>(v1.pointer()), *static_cast<const page_type *>(v2.pointer()), std::integer_sequence<unsigned, LEAF, PAGE>());
+				case 3: return node_accessor(pred, *static_cast<const leaf_type *>(v1.pointer()), *static_cast<const leaf_type *>(v2.pointer()), std::integer_sequence<unsigned, LEAF, LEAF>());
 				default: EXT_UNREACHABLE();
 			}
 		}
@@ -545,7 +594,7 @@ namespace viewed
 	/*                  Methods implementations                             */
 	/************************************************************************/
 	template <class Traits, class ModelBase>
-	const typename sftree_facade_qtbase<Traits, ModelBase>::value_container sftree_facade_qtbase<Traits, ModelBase>::ms_empty_container;
+	const typename sftree_facade_qtbase<Traits, ModelBase>::ivalue_container sftree_facade_qtbase<Traits, ModelBase>::ms_empty_container;
 
 	template <class Traits, class ModelBase>
 	const typename sftree_facade_qtbase<Traits, ModelBase>::pathview_type sftree_facade_qtbase<Traits, ModelBase>::ms_empty_path;
@@ -589,7 +638,7 @@ namespace viewed
 	}
 
 	template <class Traits, class ModelBase>
-	auto sftree_facade_qtbase<Traits, ModelBase>::get_element_ptr(const QModelIndex & index) const -> const value_ptr &
+	auto sftree_facade_qtbase<Traits, ModelBase>::get_ielement_ptr(const QModelIndex & index) const -> const ivalue_ptr &
 	{
 		auto * page = get_page(index);
 		assert(page);
@@ -605,7 +654,7 @@ namespace viewed
 		if (not parent.isValid())
 			return qint(get_children_count(&m_root));
 
-		const auto & val = get_element_ptr(parent);
+		const auto & val = get_ielement_ptr(parent);
 		return qint(get_children_count(val));
 	}
 
@@ -639,7 +688,7 @@ namespace viewed
 		}
 		else
 		{
-			auto & element = get_element_ptr(parent);
+			auto & element = get_ielement_ptr(parent);
 			auto & children = get_children(element);
 			auto count = get_children_count(element);
 
@@ -668,7 +717,7 @@ namespace viewed
 			cur_page = &m_root;
 		else
 		{
-			const auto & val_ptr = get_element_ptr(root);
+			const auto & val_ptr = get_ielement_ptr(root);
 			if (val_ptr.index() == LEAF)
 				return QModelIndex(); // leafs do not have children
 			else
@@ -688,16 +737,16 @@ namespace viewed
 			auto code_it = children.find(name);
 			if (code_it == children.end()) return QModelIndex();
 
-			if (type == PAGE)
+			auto seq_it  = children.template project<by_seq>(code_it);
+			int row = qint(seq_it - seq_view.begin());
+			if (row >= cur_page->nvisible) return QModelIndex();
+
+			if (type == LEAF)
+				return create_index(row, 0, ext::unconst(cur_page));
+			else
 			{
 				cur_page = static_cast<const page_type *>(code_it->pointer());
 				continue;
-			}
-			else
-			{
-				auto seq_it  = children.template project<by_seq>(code_it);
-				int row = qint(seq_it - seq_view.begin());
-				return create_index(row, 0, ext::unconst(cur_page));
 			}
 		}
 	}
@@ -772,11 +821,11 @@ namespace viewed
 	/************************************************************************/
 	template <class Traits, class ModelBase>
 	void sftree_facade_qtbase<Traits, ModelBase>::merge_newdata(
-		value_ptr_iterator first, value_ptr_iterator middle, value_ptr_iterator last, bool resort_old /* = true */)
+		ivalue_ptr_iterator first, ivalue_ptr_iterator middle, ivalue_ptr_iterator last, bool resort_old /* = true */)
 	{
 		if (not viewed::active(m_sort_pred)) return;
 
-		auto sorter = value_ptr_sorter_type(std::cref(m_sort_pred));
+		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
 		auto comp = viewed::make_indirect_fun(std::move(sorter));
 
 		if (resort_old) varalgo::stable_sort(first, middle, comp);
@@ -787,7 +836,7 @@ namespace viewed
 
 	template <class Traits, class ModelBase>
 	void sftree_facade_qtbase<Traits, ModelBase>::merge_newdata(
-		value_ptr_iterator first, value_ptr_iterator middle, value_ptr_iterator last,
+		ivalue_ptr_iterator first, ivalue_ptr_iterator middle, ivalue_ptr_iterator last,
 		int_vector::iterator ifirst, int_vector::iterator imiddle, int_vector::iterator ilast, bool resort_old /* = true */)
 	{
 		if (not viewed::active(m_sort_pred)) return;
@@ -795,7 +844,7 @@ namespace viewed
 		assert(last - first == ilast - ifirst);
 		assert(middle - first == imiddle - ifirst);
 
-		auto sorter = value_ptr_sorter_type(std::cref(m_sort_pred));
+		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
 		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_fun(std::move(sorter)));
 
 		auto zfirst  = ext::make_zip_iterator(first, ifirst);
@@ -808,23 +857,23 @@ namespace viewed
 	}
 
 	template <class Traits, class ModelBase>
-	void sftree_facade_qtbase<Traits, ModelBase>::stable_sort(value_ptr_iterator first, value_ptr_iterator last)
+	void sftree_facade_qtbase<Traits, ModelBase>::stable_sort(ivalue_ptr_iterator first, ivalue_ptr_iterator last)
 	{
 		if (not viewed::active(m_sort_pred)) return;
 
-		auto sorter = value_ptr_sorter_type(std::cref(m_sort_pred));
+		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
 		auto comp = viewed::make_indirect_fun(std::move(sorter));
 		varalgo::stable_sort(first, last, comp);
 	}
 
 	template <class Traits, class ModelBase>
 	void sftree_facade_qtbase<Traits, ModelBase>::stable_sort(
-		value_ptr_iterator first, value_ptr_iterator last,
+		ivalue_ptr_iterator first, ivalue_ptr_iterator last,
 		int_vector::iterator ifirst, int_vector::iterator ilast)
 	{
 		if (not viewed::active(m_sort_pred)) return;
 
-		auto sorter = value_ptr_sorter_type(std::cref(m_sort_pred));
+		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
 		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_fun(std::move(sorter)));
 
 		auto zfirst = ext::make_zip_iterator(first, ifirst);
@@ -839,7 +888,7 @@ namespace viewed
 
 		resort_context ctx;
 		int_vector index_array, inverse_buffer_array;
-		value_ptr_vector valptr_array;
+		ivalue_ptr_vector valptr_array;
 
 		ctx.index_array = &index_array;
 		ctx.inverse_array = &inverse_buffer_array;
@@ -864,7 +913,7 @@ namespace viewed
 		auto seq_ptr_view = seq_view | ext::outdirected;
 		constexpr int offset = 0;
 
-		value_ptr_vector & valptr_vector = *ctx.vptr_array;
+		ivalue_ptr_vector & valptr_vector = *ctx.vptr_array;
 		int_vector & index_array = *ctx.index_array;
 		int_vector & inverse_array = *ctx.inverse_array;
 
@@ -908,7 +957,7 @@ namespace viewed
 	{
 		refilter_context ctx;
 		int_vector index_array, inverse_buffer_array;
-		value_ptr_vector valptr_array;
+		ivalue_ptr_vector valptr_array;
 
 		ctx.index_array = &index_array;
 		ctx.inverse_array = &inverse_buffer_array;
@@ -939,14 +988,14 @@ namespace viewed
 		// but more simple - only visible area should filtered, and no sorting should be done
 		// refilter_full_and_notify - for more description
 
-		value_ptr_vector & valptr_vector = *ctx.vptr_array;
+		ivalue_ptr_vector & valptr_vector = *ctx.vptr_array;
 		int_vector & index_array = *ctx.index_array;
 		int_vector & inverse_array = *ctx.inverse_array;
 
 		valptr_vector.assign(seq_ptr_view.begin(), seq_ptr_view.end());
 		index_array.resize(seq_ptr_view.size());
 
-		auto filter = value_ptr_filter_type(std::cref(m_filter_pred));
+		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
 		auto fpred  = viewed::make_indirect_fun(std::move(filter));
 		auto zfpred = viewed::make_get_functor<0>(fpred);
 
@@ -981,7 +1030,7 @@ namespace viewed
 	{
 		refilter_context ctx;
 		int_vector index_array, inverse_buffer_array;
-		value_ptr_vector valptr_array;
+		ivalue_ptr_vector valptr_array;
 
 		ctx.index_array = &index_array;
 		ctx.inverse_array = &inverse_buffer_array;
@@ -1009,7 +1058,7 @@ namespace viewed
 		constexpr int offset = 0;
 		int nvisible_new;
 
-		value_ptr_vector & valptr_vector = *ctx.vptr_array;
+		ivalue_ptr_vector & valptr_vector = *ctx.vptr_array;
 		int_vector & index_array = *ctx.index_array;
 		int_vector & inverse_array = *ctx.inverse_array;
 
@@ -1032,7 +1081,7 @@ namespace viewed
 		valptr_vector.assign(seq_ptr_view.begin(), seq_ptr_view.end());
 		index_array.resize(seq_ptr_view.size());
 
-		auto filter = value_ptr_filter_type(std::cref(m_filter_pred));
+		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
 		auto fpred  = viewed::make_indirect_fun(std::move(filter));
 		auto zfpred = viewed::make_get_functor<0>(fpred);
 
@@ -1103,7 +1152,7 @@ namespace viewed
 	template <class ... Args>
 	auto sftree_facade_qtbase<Traits, ModelBase>::filter_by(Args && ... args) -> viewed::refilter_type
 	{
-		auto rtype = m_filter_pred.set_expr(std::forward<Args>(args)...);
+		refilter_type rtype = m_filter_pred.set_expr(std::forward<Args>(args)...);
 		refilter_and_notify(rtype);
 
 		return rtype;
@@ -1152,7 +1201,7 @@ namespace viewed
 				// create new page
 				auto page_ptr = std::make_unique<page_type>();
 				page_ptr->parent = &page;
-				traits_type::set_name(*page_ptr, std::move(ctx.path), std::move(name));
+				traits_type::set_name(page_ptr->node, std::move(ctx.path), std::move(name));
 				// process child node recursively
 				reset_page(*page_ptr, newctx);
 
@@ -1162,11 +1211,10 @@ namespace viewed
 		}
 
 		// rearrange children according to filtering/sorting criteria
-		page.nvisible = container.size();
-		value_ptr_vector & refs = *ctx.vptr_array;
+		ivalue_ptr_vector & refs = *ctx.vptr_array;
 		refs.assign(seq_ptr_view.begin(), seq_ptr_view.end());
 
-		auto filter = value_ptr_filter_type(std::cref(m_filter_pred));
+		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
 		auto fpred  = viewed::make_indirect_fun(std::move(filter));
 
 		auto refs_first = refs.begin();
@@ -1180,6 +1228,7 @@ namespace viewed
 		// apply sorting
 		stable_sort(refs_first, refs_pp);
 
+		page.nvisible = refs_pp - refs_first;
 		seq_view.rearrange(boost::make_transform_iterator(refs_first, make_ref));
 
 		// and recalculate page
@@ -1277,7 +1326,7 @@ namespace viewed
 			auto pos = seqit - seq_view.begin();
 			*--ctx.changed_first = pos;
 			
-			value_ptr & val = ext::unconst(*it);
+			ivalue_ptr & val = ext::unconst(*it);
 			val = std::forward<decltype(item)>(item);
 		}
 
@@ -1306,9 +1355,9 @@ namespace viewed
 			std::tie(type, ctx.inserted_name, ctx.inserted_path) = parse_path(this->get_path(*item), ctx.path);
 			if (type == PAGE) return std::tie(ctx.inserted_name, ctx.inserted_path);
 
-			bool inserted;
-			std::tie(std::ignore, inserted) = container.insert(std::forward<decltype(item)>(item));
-			assert(inserted); (void)inserted;	
+			decltype(container.begin()) it; bool inserted;
+			std::tie(it, inserted) = container.insert(std::forward<decltype(item)>(item));
+			assert(inserted or it->index() == PAGE); EXT_UNUSED(it, inserted);
 		}
 
 		ctx.inserted_name = pathview_type();
@@ -1370,7 +1419,22 @@ namespace viewed
 			bool inserted = false;
 			auto it = container.find(name);
 			if (it != container.end())
-				child_page = static_cast<page_type *>(it->pointer());
+			{
+				if (it->index() == PAGE)
+					child_page = static_cast<page_type *>(it->pointer());
+				else
+				{
+					// Element was a leaf, but we want a page now, replace it with new page.
+					// This can happen on upsert operation with something like: "folder" -> "folder/file"
+					assert(ctx.updated_diff or ctx.inserted_diff);
+					auto child = std::make_unique<page_type>();
+					child_page = child.get();
+
+					child_page->parent = &page;
+					traits_type::set_name(child_page->node, std::move(path), std::move(name));
+					container.replace(it, std::move(child));
+				}
+			}
 			else 
 			{
 				// if creating new page - there definitely was inserted or updated element
@@ -1379,7 +1443,7 @@ namespace viewed
 				child_page = child.get();
 
 				child_page->parent = &page;
-				traits_type::set_name(*child_page, std::move(path), std::move(name));
+				traits_type::set_name(child_page->node, std::move(path), std::move(name));
 				std::tie(it, inserted) = container.insert(std::move(child));
 			}			
 
@@ -1404,7 +1468,7 @@ namespace viewed
 		ctx.erased_count   = ctx.removed_last - ctx.removed_first;
 
 		rearrange_children_and_notify(page, ctx);
-		// step 6: recalculate node from it's changed children
+		// step 6: recalculate node from it's children
 		this->recalculate_page(page);
 	}
 
@@ -1418,11 +1482,11 @@ namespace viewed
 		constexpr int offset = 0;
 		int nvisible_new;
 
-		value_ptr_vector & valptr_vector = *ctx.vptr_array;
+		ivalue_ptr_vector & valptr_vector = *ctx.vptr_array;
 		int_vector & index_array = *ctx.index_array;
 		int_vector & inverse_array = *ctx.inverse_array;
 
-		auto filter = value_ptr_filter_type(std::cref(m_filter_pred));
+		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
 		auto fpred  = viewed::make_indirect_fun(std::move(filter));
 
 		// We must rearrange children according to sorting/filtering criteria.
@@ -1632,7 +1696,7 @@ namespace viewed
 	{
 		using update_context = update_context_template<ErasedRandomAccessIterator, UpdatedRandomAccessIterator, InsertedRandomAccessIterator>;
 		int_vector affected_indexes, index_array, inverse_buffer_array;
-		value_ptr_vector valptr_array;
+		ivalue_ptr_vector valptr_array;
 		
 		auto expected_indexes = erased_last - erased_first + std::max(updated_last - updated_first, inserted_last - inserted_first);
 		affected_indexes.resize(expected_indexes);

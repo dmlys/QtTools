@@ -141,7 +141,7 @@ namespace viewed
 		this->m_root.nvisible = 0;
 		this->m_root.children.clear();
 
-		typename base_type::value_ptr_vector valptr_array;
+		typename base_type::ivalue_ptr_vector valptr_array;
 		reset_context ctx;
 
 		auto first = elements.begin();

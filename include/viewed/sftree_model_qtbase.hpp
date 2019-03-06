@@ -30,9 +30,9 @@ namespace viewed
 	public:
 		using typename base_type::leaf_type;
 		using typename base_type::node_type;
-		using typename base_type::value_ptr;
 
 	protected:
+		using typename base_type::ivalue_ptr;
 		using typename base_type::page_type;
 
 	protected:
@@ -116,10 +116,10 @@ namespace viewed
 		fill_children_leafs(this->m_root, existing);
 
 		auto el_first = elements.begin();
-		auto el_last = elements.end();
+		auto el_last  = elements.end();
 
 		auto erased_first = existing.begin();
-		auto erased_last = existing.end();
+		auto erased_last  = existing.end();
 
 		this->group_by_paths(erased_first, erased_last);
 		this->group_by_paths(el_first, el_last);
