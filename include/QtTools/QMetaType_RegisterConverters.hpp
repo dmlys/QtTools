@@ -52,7 +52,7 @@ namespace QtTools
 			ext::itoa_buffer<IntegralType> buffer;
 			auto * last = std::end(buffer) - 1;
 			auto * first = ext::itoa(val, buffer);
-			return StringType(first, last);
+			return StringType(first, last - first);
 		}
 
 		template <class Double, class StringType>
@@ -117,9 +117,7 @@ namespace QtTools
 		template <class StringType>
 		StringType FromQByteArray(const QByteArray & val)
 		{
-			const char * first = val.data();
-			const char * last = first + val.size();
-			return StringType(first, last);
+			return StringType(val.data(), val.size());
 		}
 
 		template <class StringType>
