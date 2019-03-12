@@ -1,44 +1,16 @@
 ﻿#pragma once
-#include <variant>
-#include <type_traits> // for result_of
-#include <functional>  // for reference_wrapprer
 #include <ext/functors/indirect_functor.hpp>
-#include <boost/variant.hpp>
-#include <boost/mp11/algorithm.hpp>
+#include <viewed/wrap_functor.hpp>
 
 namespace viewed
 {
-	/// преобразует предикат в boost::indirect_fun<Pred>
+	/// преобразует предикат в ext::indirect_functor<Pred>
 	template <class Pred>
-	struct make_indirect_pred_type
-	{
-		typedef typename std::conditional<
-			std::is_copy_constructible<Pred>::value,
-			ext::indirect_functor<Pred>,
-			ext::indirect_functor<std::reference_wrapper<const Pred>>
-		>::type type;
-	};
+	using make_indirect_functor_type_t = viewed::wrap_functor_type_t<ext::indirect_functor, Pred>;
 
-	/// преобразует boost::variant<Types...> в boost::variant<boost::indirect_fun<Types>...>
-	template <class ... VariantTypes>
-	struct make_indirect_pred_type<boost::variant<VariantTypes...>>
-	{
-		using type = boost::mp11::mp_transform<viewed::make_indirect_pred_type, boost::variant<VariantTypes...>>;
-	};
-
-	template <class ... VariantTypes>
-	struct make_indirect_pred_type<std::variant<VariantTypes...>>
-	{
-		using type = boost::mp11::mp_transform<viewed::make_indirect_pred_type, std::variant<VariantTypes...>>;
-	};
-
-
-	///аналогичен boost::make_indirect_fun,
-	///но корректно обрабатывает boost::variant
 	template <class Pred>
-	inline auto make_indirect_fun(const Pred & pred)
+	inline auto make_indirect_functor(const Pred & pred)
 	{
-		using result_type = typename make_indirect_pred_type<Pred>::type;
-		return result_type {pred};
+		return viewed::wrap_functor<ext::indirect_functor>(pred);
 	}
 }

@@ -192,7 +192,7 @@ namespace viewed
 		else
 		{
 			m_store.clear();
-			auto pred = viewed::make_indirect_fun(m_filter_pred);
+			auto pred = viewed::make_indirect_functor(m_filter_pred);
 			std::copy_if(range.begin(), range.end(), std::back_inserter(m_store), pred);
 		}
 
@@ -373,7 +373,7 @@ namespace viewed
 	{
 		if (not active(m_sort_pred)) return;
 
-		auto comp = viewed::make_indirect_fun(m_sort_pred);
+		auto comp = viewed::make_indirect_functor(m_sort_pred);
 
 		if (resort_old) varalgo::stable_sort(first, middle, comp);
 		varalgo::sort(middle, last, comp);
@@ -391,7 +391,7 @@ namespace viewed
 		assert(last - first == ilast - ifirst);
 		assert(middle - first == imiddle - ifirst);
 
-		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_fun(m_sort_pred));
+		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_functor(m_sort_pred));
 
 		auto zfirst  = ext::make_zip_iterator(first, ifirst);
 		auto zmiddle = ext::make_zip_iterator(middle, imiddle);
@@ -407,7 +407,7 @@ namespace viewed
 	{
 		if (not active(m_sort_pred)) return;
 
-		auto comp = viewed::make_indirect_fun(m_sort_pred);
+		auto comp = viewed::make_indirect_functor(m_sort_pred);
 		varalgo::stable_sort(first, last, comp);
 	}
 
@@ -418,7 +418,7 @@ namespace viewed
 	{
 		if (not active(m_sort_pred)) return;
 
-		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_fun(m_sort_pred));
+		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_functor(m_sort_pred));
 
 		auto zfirst = ext::make_zip_iterator(first, ifirst);
 		auto zlast = ext::make_zip_iterator(last, ilast);
@@ -452,7 +452,7 @@ namespace viewed
 	{
 		if (not active(m_sort_pred)) return {m_store.begin(), m_store.end()};
 
-		auto comp = viewed::make_indirect_fun(m_sort_pred);
+		auto comp = viewed::make_indirect_functor(m_sort_pred);
 		return varalgo::equal_range(m_store, ptr, comp);
 	}
 

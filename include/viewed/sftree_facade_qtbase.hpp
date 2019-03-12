@@ -826,7 +826,7 @@ namespace viewed
 		if (not viewed::active(m_sort_pred)) return;
 
 		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
-		auto comp = viewed::make_indirect_fun(std::move(sorter));
+		auto comp = viewed::make_indirect_functor(std::move(sorter));
 
 		if (resort_old) varalgo::stable_sort(first, middle, comp);
 		varalgo::sort(middle, last, comp);
@@ -845,7 +845,7 @@ namespace viewed
 		assert(middle - first == imiddle - ifirst);
 
 		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
-		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_fun(std::move(sorter)));
+		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_functor(std::move(sorter)));
 
 		auto zfirst  = ext::make_zip_iterator(first, ifirst);
 		auto zmiddle = ext::make_zip_iterator(middle, imiddle);
@@ -862,7 +862,7 @@ namespace viewed
 		if (not viewed::active(m_sort_pred)) return;
 
 		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
-		auto comp = viewed::make_indirect_fun(std::move(sorter));
+		auto comp = viewed::make_indirect_functor(std::move(sorter));
 		varalgo::stable_sort(first, last, comp);
 	}
 
@@ -874,7 +874,7 @@ namespace viewed
 		if (not viewed::active(m_sort_pred)) return;
 
 		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
-		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_fun(std::move(sorter)));
+		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_functor(std::move(sorter)));
 
 		auto zfirst = ext::make_zip_iterator(first, ifirst);
 		auto zlast = ext::make_zip_iterator(last, ilast);
@@ -996,7 +996,7 @@ namespace viewed
 		index_array.resize(seq_ptr_view.size());
 
 		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
-		auto fpred  = viewed::make_indirect_fun(std::move(filter));
+		auto fpred  = viewed::make_indirect_functor(std::move(filter));
 		auto zfpred = viewed::make_get_functor<0>(fpred);
 
 		auto vfirst = valptr_vector.begin();
@@ -1082,7 +1082,7 @@ namespace viewed
 		index_array.resize(seq_ptr_view.size());
 
 		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
-		auto fpred  = viewed::make_indirect_fun(std::move(filter));
+		auto fpred  = viewed::make_indirect_functor(std::move(filter));
 		auto zfpred = viewed::make_get_functor<0>(fpred);
 
 		auto vfirst = valptr_vector.begin();
@@ -1215,7 +1215,7 @@ namespace viewed
 		refs.assign(seq_ptr_view.begin(), seq_ptr_view.end());
 
 		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
-		auto fpred  = viewed::make_indirect_fun(std::move(filter));
+		auto fpred  = viewed::make_indirect_functor(std::move(filter));
 
 		auto refs_first = refs.begin();
 		auto refs_last  = refs.end();
@@ -1487,7 +1487,7 @@ namespace viewed
 		int_vector & inverse_array = *ctx.inverse_array;
 
 		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
-		auto fpred  = viewed::make_indirect_fun(std::move(filter));
+		auto fpred  = viewed::make_indirect_functor(std::move(filter));
 
 		// We must rearrange children according to sorting/filtering criteria.
 		// * some elements have been erased - those must be erased

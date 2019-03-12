@@ -1,12 +1,7 @@
-#pragma once
-#include <type_traits> // for result_of
-#include <functional>  // for reference_wrapprer
+﻿#pragma once
 #include <utility>     // for std::get
 #include <tuple>       // for std::get
-
-#include <boost/variant.hpp>
-#include <boost/mp11/algorithm.hpp>
-#include <boost/mp11/bind.hpp>
+#include <viewed/wrap_functor.hpp>
 
 namespace viewed
 {
@@ -17,7 +12,7 @@ namespace viewed
 		Functor func;
 
 		template <class ... Args>
-		auto operator()(Args && ... args) const
+		decltype(auto) operator()(Args && ... args) const
 		{
 			using std::get;
 			return func(get<Index>(std::forward<Args>(args))...);
@@ -27,34 +22,21 @@ namespace viewed
 		get_functor(Functor func) : func(std::move(func)) {}
 	};
 
-	/// transforms Functor to get_functor<Functor>
 	template <std::size_t Index, class Functor>
 	struct make_get_functor_type
 	{
-		typedef typename std::conditional<
-			std::is_copy_constructible<Functor>::value,
-			get_functor<Index, Functor>,
-			get_functor<Index, std::reference_wrapper<const Functor>>
-		>::type type;
-	};
+		template <class Arg>
+		using helper = get_functor<Index, Arg>;
 
-	/// transforms boost::varaint<Types...> to boost::variant<get_functor<Types>...>
-	template <std::size_t Index, class... VariantTypes>
-	struct make_get_functor_type<Index, boost::variant<VariantTypes...>>
-	{
-		template <class Type>
-		struct helper
-		{
-			typedef typename make_get_functor_type<Index, Type>::type type;
-		};
-
-		using type = boost::mp11::mp_transform<helper, boost::variant<VariantTypes...>>;
+		using type = viewed::wrap_functor_type_t<helper, Functor>;
 	};
 
 	template <std::size_t Index, class Functor>
-	inline auto make_get_functor(const Functor & func)		
+	using make_get_functor_type_t = typename make_get_functor_type<Index, Functor>::type;
+
+	template <std::size_t Index, class Functor>
+	inline auto make_get_functor(const Functor & func)
 	{
-		using result_type = typename make_get_functor_type<Index, Functor>::type;
-		return result_type {func};
+		return viewed::wrap_functor<make_get_functor_type<Index, Functor>::template helper>(func);
 	}
 }
