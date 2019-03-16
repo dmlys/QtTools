@@ -6,6 +6,7 @@
 
 #include <viewed/algorithm.hpp>
 #include <viewed/forward_types.hpp>
+#include <viewed/wrap_functor.hpp>
 #include <viewed/get_functor.hpp>
 #include <viewed/indirect_functor.hpp>
 #include <viewed/qt_model.hpp>
@@ -321,6 +322,9 @@ namespace viewed
 		template <class Pred> struct ivalue_ptr_filter_type;
 		template <class Pred> struct ivalue_ptr_sorter_type;
 
+		template <class Pred> static auto make_ivalue_ptr_filter(const Pred & pred);
+		template <class Pred> static auto make_ivalue_ptr_sorter(const Pred & pred);
+
 	protected:
 		// those are sort of member functions, but functors
 		static constexpr path_equal_to_type path_equal_to {};
@@ -525,7 +529,7 @@ namespace viewed
 		// if node and leaf are the same types - we should provide a hint to predicate what argument is: LEAF or PAGE
 		// but only if Predicate accepts those hints
 		static constexpr auto HintedCall = std::is_same_v<leaf_type, node_type> and std::is_invocable_v<Pred, const leaf_type &, std::integer_sequence<unsigned, LEAF>>;
-		using pred_type = std::conditional_t<HintedCall, Pred, typename viewed::make_indirect_pred_type<Pred>::type>;
+		using pred_type = std::conditional_t<HintedCall, Pred, viewed::make_indirect_functor_type_t<Pred>>;
 
 		pred_type pred;
 
@@ -551,6 +555,13 @@ namespace viewed
 		}
 	}
 
+	template <class Traits, class ModelBase>
+	template <class Pred>
+	inline auto sftree_facade_qtbase<Traits, ModelBase>::make_ivalue_ptr_filter(const Pred & pred)
+	{
+		return ivalue_ptr_filter_type(pred);
+	}
+
 	/************************************************************************/
 	/*                  value_ptr_sorter_type definition                    */
 	/************************************************************************/
@@ -561,7 +572,7 @@ namespace viewed
 		// if node and leaf are the same types - we should provide a hint to predicate what arguments are: LEAF or PAGE
 		// but only if Predicate accepts those hints
 		static constexpr auto HintedCall = std::is_same_v<leaf_type, node_type> and std::is_invocable_v<Pred, const leaf_type &, const leaf_type &, std::integer_sequence<unsigned, LEAF, LEAF>>;
-		using pred_type = std::conditional_t<HintedCall, Pred, typename viewed::make_indirect_pred_type<Pred>::type>;
+		using pred_type = std::conditional_t<HintedCall, Pred, typename viewed::make_indirect_functor_type_t<Pred>>;
 		pred_type pred;
 
 		ivalue_ptr_sorter_type(Pred pred) : pred(std::move(pred)) {}
@@ -588,6 +599,13 @@ namespace viewed
 				default: EXT_UNREACHABLE();
 			}
 		}
+	}
+
+	template <class Traits, class ModelBase>
+	template <class Pred>
+	inline auto sftree_facade_qtbase<Traits, ModelBase>::make_ivalue_ptr_sorter(const Pred & pred)
+	{
+		return viewed::wrap_functor<ivalue_ptr_sorter_type>(pred);
 	}
 
 	/************************************************************************/
@@ -825,7 +843,7 @@ namespace viewed
 	{
 		if (not viewed::active(m_sort_pred)) return;
 
-		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
+		auto sorter = make_ivalue_ptr_sorter(std::cref(m_sort_pred));
 		auto comp = viewed::make_indirect_functor(std::move(sorter));
 
 		if (resort_old) varalgo::stable_sort(first, middle, comp);
@@ -844,7 +862,7 @@ namespace viewed
 		assert(last - first == ilast - ifirst);
 		assert(middle - first == imiddle - ifirst);
 
-		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
+		auto sorter = make_ivalue_ptr_sorter(std::cref(m_sort_pred));
 		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_functor(std::move(sorter)));
 
 		auto zfirst  = ext::make_zip_iterator(first, ifirst);
@@ -861,7 +879,7 @@ namespace viewed
 	{
 		if (not viewed::active(m_sort_pred)) return;
 
-		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
+		auto sorter = make_ivalue_ptr_sorter(std::cref(m_sort_pred));
 		auto comp = viewed::make_indirect_functor(std::move(sorter));
 		varalgo::stable_sort(first, last, comp);
 	}
@@ -873,7 +891,7 @@ namespace viewed
 	{
 		if (not viewed::active(m_sort_pred)) return;
 
-		auto sorter = ivalue_ptr_sorter_type(std::cref(m_sort_pred));
+		auto sorter = make_ivalue_ptr_sorter(std::cref(m_sort_pred));
 		auto comp = viewed::make_get_functor<0>(viewed::make_indirect_functor(std::move(sorter)));
 
 		auto zfirst = ext::make_zip_iterator(first, ifirst);
@@ -995,7 +1013,7 @@ namespace viewed
 		valptr_vector.assign(seq_ptr_view.begin(), seq_ptr_view.end());
 		index_array.resize(seq_ptr_view.size());
 
-		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
+		auto filter = make_ivalue_ptr_filter(std::cref(m_filter_pred));
 		auto fpred  = viewed::make_indirect_functor(std::move(filter));
 		auto zfpred = viewed::make_get_functor<0>(fpred);
 
@@ -1081,7 +1099,7 @@ namespace viewed
 		valptr_vector.assign(seq_ptr_view.begin(), seq_ptr_view.end());
 		index_array.resize(seq_ptr_view.size());
 
-		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
+		auto filter = make_ivalue_ptr_filter(std::cref(m_filter_pred));
 		auto fpred  = viewed::make_indirect_functor(std::move(filter));
 		auto zfpred = viewed::make_get_functor<0>(fpred);
 
@@ -1214,7 +1232,7 @@ namespace viewed
 		ivalue_ptr_vector & refs = *ctx.vptr_array;
 		refs.assign(seq_ptr_view.begin(), seq_ptr_view.end());
 
-		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
+		auto filter = make_ivalue_ptr_filter(std::cref(m_filter_pred));
 		auto fpred  = viewed::make_indirect_functor(std::move(filter));
 
 		auto refs_first = refs.begin();
@@ -1486,7 +1504,7 @@ namespace viewed
 		int_vector & index_array = *ctx.index_array;
 		int_vector & inverse_array = *ctx.inverse_array;
 
-		auto filter = ivalue_ptr_filter_type(std::cref(m_filter_pred));
+		auto filter = make_ivalue_ptr_filter(std::cref(m_filter_pred));
 		auto fpred  = viewed::make_indirect_functor(std::move(filter));
 
 		// We must rearrange children according to sorting/filtering criteria.
