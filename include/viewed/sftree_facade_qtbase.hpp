@@ -18,6 +18,7 @@
 #include <ext/config.hpp>
 #include <ext/utility.hpp>
 #include <ext/try_reserve.hpp>
+#include <ext/noinit.hpp>
 #include <ext/iterator/zip_iterator.hpp>
 #include <ext/iterator/outdirect_iterator.hpp>
 #include <ext/iterator/indirect_iterator.hpp>
@@ -29,6 +30,7 @@
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/random_access_index.hpp>
 #include <boost/iterator/transform_iterator.hpp>
+//#include <boost/variant.hpp>
 
 #include <QtCore/QAbstractItemModel>
 #include <QtTools/ToolsBase.hpp>
@@ -63,10 +65,11 @@ namespace viewed
 	/// Traits    - traits class describing type and how to work with this type.
 	///
 	/// This class implements rowCount, index, parent methods from QAbstractItemModel; it does not implement columnCount, data, headerData.
-	/// It also provides method for:
+	/// It also provides:
 	///  * getting leaf/node from given QModelIndex
 	///  * helper methods for implementation filtering/sorting
 	///  * updating, resetting model from new data
+	///  * recalculation persistent
 	///
 	/// Traits should provide next:
 	///   using leaf_type = ...
@@ -95,23 +98,22 @@ namespace viewed
 	///       for std::string and std::string_view - you can use std::hash<std::string_view>
 	///       for QString and QStringRef - see QtTools/ToolsBase.hpp
 	///
-	///
-	///   NOTE: static members can be functors
+	///   NOTE: methods can or not be static
 	///   methods for working with given types:
-	///     static void set_name(node_type & node, pathview_type && path, pathview_type && name);
+	///     void set_name(node_type & node, pathview_type && path, pathview_type && name);
 	///       assigns path and name to node, path is already contains name, no concatenation is needed.
 	///       In fact node can hold only given name part, or whole path if desired.
 	///       possible implementation: item.name = name
 	///
-	///     static auto get_name(const leaf_type & leaf) -> path_type/pathview_type/const path_type &;
-	///     static auto get_name(const node_type & node) -> path_type/pathview_type/const path_type &;
+	///     auto get_name(const leaf_type & leaf) -> path_type/pathview_type/const path_type &;
+	///     auto get_name(const node_type & node) -> path_type/pathview_type/const path_type &;
 	///       returns/extracts name from leaf/node, usually something like: return extract_name(leaf/node.name)
 	///
-	///     static auto get_path(const leaf_type & leaf) -> path_type/pathview_type/const path_type &;
+	///     auto get_path(const leaf_type & leaf) -> path_type/pathview_type/const path_type &;
 	///       returns whole path from leaf, usually something like: return leaf.filepath
 	///
-	///                                                                                                PAGE/LEAF     leaf/node name   newcontext
-	///     auto parse_path(const pathview_type & path, const pathview_type & context) -> std::tuple<std::uintptr_t, pathview_type, pathview_type>;
+	///                                                                                           PAGE/LEAF     leaf/node name   newcontext
+	///     parse_path(const pathview_type & path, const pathview_type & context) -> std::tuple<std::uintptr_t, pathview_type, pathview_type>;
 	///       parses given path under given context, where:
 	///         path    - path from leaf_type acquired via get_path call
 	///         context - is a parent path, at start - empty, but then it will be one returned by this function
@@ -119,9 +121,9 @@ namespace viewed
 	///         if it's PAGE - also returns node name and newcontext/newpath(old path + node name)
 	///         if it's LEAF - returns leaf name, value of newcontext is unused
 	///
-	///     bool is_child(const pathview_type & path, const pathview_type & context, const pathview_type & node_name);
-	///       returns if leaf path(acquired via get_path from leaf_type) is a logically a child of node with given node_name and under given context.
-	///       Note context is same as returned from parse_path from previous step and does not include node name.
+	///     bool is_child(const pathview_type & path, const pathview_type & context);
+	///       returns if leaf.path(acquired via get_path from leaf_type) is a logically a child to given context(path).
+	///       Note context is same as returned from parse_path and as result includes node name.
 	///
 	///
 	///   using sort_pred_type = ...
@@ -130,9 +132,7 @@ namespace viewed
 	///     should be default constructable
 	///
 	template <class Traits, class ModelBase = QAbstractItemModel>
-	class sftree_facade_qtbase :
-		public ModelBase,
-		protected Traits
+	class sftree_facade_qtbase : public ModelBase
 	{
 		using self_type = sftree_facade_qtbase;
 		static_assert(std::is_base_of_v<QAbstractItemModel, ModelBase>);
@@ -147,25 +147,21 @@ namespace viewed
 		using model_base = ModelBase;
 
 		// bring traits types used by this sftree_facade
-		using typename traits_type::leaf_type;
-		using typename traits_type::node_type;
+		using leaf_type = typename traits_type::leaf_type;
+		using node_type = typename traits_type::node_type;
 
-		using typename traits_type::path_type;
-		using typename traits_type::pathview_type;
-		using typename traits_type::path_equal_to_type;
-		using typename traits_type::path_less_type;
-		using typename traits_type::path_hash_type;
+		using path_type          = typename traits_type::path_type;
+		using pathview_type      = typename traits_type::pathview_type;
+		using path_equal_to_type = typename traits_type::path_equal_to_type;
+		using path_less_type     = typename traits_type::path_less_type;
+		using path_hash_type     = typename traits_type::path_hash_type;
 
-		using typename traits_type::sort_pred_type;
-		using typename traits_type::filter_pred_type;
+		using sort_pred_type   = typename traits_type::sort_pred_type;
+		using filter_pred_type = typename traits_type::filter_pred_type;
 
 	public:
 		/// value_ptr is sort of value_type, variant of leaf or node
 		//using value_ptr = viewed::pointer_variant<const node_type *, const leaf_type *>;
-
-	protected:
-		using traits_type::parse_path;
-		using traits_type::is_child;
 
 	protected:
 		struct page_type;
@@ -180,21 +176,27 @@ namespace viewed
 
 		struct get_name_type
 		{
+			const traits_type * traits;
+			get_name_type(const traits_type * traits) : traits(traits) {}
+
 			using result_type = pathview_type;
 			//decltype(auto) operator()(const path_type & path) const { return traits_type::get_name(path); }
-			decltype(auto) operator()(const leaf_type & leaf) const { return traits_type::get_name(leaf); }
-			decltype(auto) operator()(const page_type & page) const { return traits_type::get_name(page.node); }
+			decltype(auto) operator()(const leaf_type & leaf) const { return traits->get_name(leaf); }
+			decltype(auto) operator()(const page_type & page) const { return traits->get_name(page.node); }
 			decltype(auto) operator()(const ivalue_ptr & val) const { return viewed::visit(*this, val); }
 
 			// important, viewed::visit(*this, val) depends on them, otherwise infinite recursion would occur
-			decltype(auto) operator()(const leaf_type * leaf) const { return traits_type::get_name(*leaf); }
-			decltype(auto) operator()(const page_type * page) const { return traits_type::get_name(page->node); }
+			decltype(auto) operator()(const leaf_type * leaf) const { return traits->get_name(*leaf); }
+			decltype(auto) operator()(const page_type * page) const { return traits->get_name(page->node); }
 		};
 
 		struct path_group_pred_type
 		{
+			const traits_type * traits;
+			path_group_pred_type(const traits_type * traits) : traits(traits) {}
+
 			// arguments - swapped, intended, sort in descending order
-			bool operator()(const leaf_type & l1, const leaf_type & l2) const noexcept { return path_less(traits_type::get_path(l2),  traits_type::get_path(l1));  }
+			bool operator()(const leaf_type & l1, const leaf_type & l2) const noexcept { return path_less(traits->get_path(l2), traits->get_path(l1));  }
 			//bool operator()(const leaf_type * l1, const leaf_type * l2) const noexcept { return path_less(traits_type::get_path(*l2), traits_type::get_path(*l1)); }
 
 			template <class Pointer1, class Pointer2>
@@ -203,7 +205,7 @@ namespace viewed
 				and std::is_same_v<leaf_type, ext::remove_cvref_t<decltype(*std::declval<Pointer2>())>>
 				, bool
 			>
-			operator()(Pointer1 && p1, Pointer2 && p2) const noexcept { return path_less(traits_type::get_path(*p2), traits_type::get_path(*p1)); }
+			operator()(Pointer1 && p1, Pointer2 && p2) const noexcept { return path_less(traits->get_path(*p2), traits->get_path(*p1)); }
 		};
 
 		using ivalue_container = boost::multi_index_container<
@@ -236,6 +238,8 @@ namespace viewed
 			std::size_t      nvisible = 0;     // number of visible elements in container, see above
 			ivalue_container children;         // our children
 			node_type        node;             // node data
+
+			page_type(const self_type * self) : children(create_container(self)) {}
 		};
 
 		struct get_children_type
@@ -331,10 +335,11 @@ namespace viewed
 		static constexpr path_less_type     path_less {};
 		static constexpr path_hash_type     path_hash {};
 
-		static constexpr get_name_type           get_name {};
+		const get_name_type         get_name = get_name_type(&m_traits);
+		const path_group_pred_type  path_group_pred = path_group_pred_type(&m_traits);
+
 		static constexpr get_children_type       get_children {};
 		static constexpr get_children_count_type get_children_count {};
-		static constexpr path_group_pred_type    path_group_pred {};
 
 		static constexpr node_accessor_type node_accessor {};
 		static constexpr auto make_ref = [](auto * ptr) { return std::ref(*ptr); };
@@ -343,22 +348,25 @@ namespace viewed
 		static const pathview_type     ms_empty_path;
 		static const ivalue_container  ms_empty_container;
 
-
 	protected:
+		// our statefull traits
+		traits_type m_traits;
 		// root page, note it's somewhat special, it's parent node is always nullptr,
 		// and node_type part is empty and unused
-		page_type m_root;
+		page_type m_root = page_type(this);
 
-		sort_pred_type m_sort_pred;
+		sort_pred_type   m_sort_pred;
 		filter_pred_type m_filter_pred;
 
-
 	protected:
+		static ivalue_container create_container(const self_type * self);
+		static ivalue_container create_container(ext::noinit_type);
+
 		template <class Functor>
 		static void for_each_child_page(page_type & page, Functor && func);
 
 		template <class RandomAccessIterator>
-		static void group_by_paths(RandomAccessIterator first, RandomAccessIterator last);
+		void group_by_paths(RandomAccessIterator first, RandomAccessIterator last);
 
 	protected: // core QAbstractItemModel functionality implementation
 		/// creates index for element with row, column in given page, this is just more typed version of QAbstractItemModel::createIndex
@@ -385,7 +393,7 @@ namespace viewed
 		virtual void recalculate_page(page_type & page) = 0;
 
 	protected:
-		/// emits qt signal this->dataChanged about changed rows. Changred rows are defined by [first; last)
+		/// emits qt signal this->dataChanged about changed rows. Changed rows are defined by [first; last)
 		/// default implantation just calls this->dataChanged(index(row, 0, parent), index(row, this->columnCount, parent))
 		virtual void emit_changed(QModelIndex parent, int_vector::const_iterator first, int_vector::const_iterator last);
 		/// changes persistent indexes via this->changePersistentIndex.
@@ -472,13 +480,89 @@ namespace viewed
 		template <class ... Args> void sort_by(Args && ... args);
 
 	public:
-		sftree_facade_qtbase(QObject * parent = nullptr) : model_base(parent) {}
-		sftree_facade_qtbase(traits_type traits, QObject * parent = nullptr) : model_base(parent), traits_type(std::move(traits)) {}
+		sftree_facade_qtbase(QObject * parent = nullptr) : sftree_facade_qtbase(traits_type(), parent) {}
+		sftree_facade_qtbase(traits_type traits, QObject * parent = nullptr);
 		virtual ~sftree_facade_qtbase() = default;
 	};
 
+	namespace sftree_detail
+	{
+		template <class Type, class Traits>
+		auto set_traits(Type * entity, Traits * traits) -> decltype(std::declval<Type *>()->set_traits(std::declval<Traits &>()))
+		{ return entity->set_traits(*traits); }
+
+		template <class Type, class Traits>
+		auto set_traits(Type * entity, Traits * traits) -> decltype(std::declval<Type *>()->set_traits(std::declval<Traits *>()))
+		{ return entity->set_traits(traits); }
+
+		inline void set_traits(...) { }
+
+		template <class... Types, class Traits>
+		void set_traits(std::variant<Types...> * entity, Traits * traits)
+		{
+			std::visit([traits](auto & item) { set_traits(&item, traits); }, *entity);
+		}
+
+		//template <class... Types, class Traits>
+		//void set_traits(boost::variant<Types...> * entity, Traits * traits)
+		//{
+		//	boost::apply_visitor([traits](auto & item) { set_traits(&item, traits); }, *entity);
+		//}
+
+	}
+
+	template <class Traits, class ModelBase>
+	sftree_facade_qtbase<Traits, ModelBase>::sftree_facade_qtbase(traits_type traits, QObject * parent)
+	    : model_base(parent), m_traits(std::move(traits))
+	{
+		sftree_detail::set_traits(&m_sort_pred,   &m_traits);
+		sftree_detail::set_traits(&m_filter_pred, &m_traits);
+	}
+
 	/************************************************************************/
-	/*                   node_accessor_type definition                     */
+	/*                   class statics and page creation                    */
+	/************************************************************************/
+	template <class Traits, class ModelBase>
+	const typename sftree_facade_qtbase<Traits, ModelBase>::ivalue_container sftree_facade_qtbase<Traits, ModelBase>::ms_empty_container
+		= sftree_facade_qtbase<Traits, ModelBase>::create_container(ext::noinit);
+
+	template <class Traits, class ModelBase>
+	const typename sftree_facade_qtbase<Traits, ModelBase>::pathview_type sftree_facade_qtbase<Traits, ModelBase>::ms_empty_path;
+
+	template <class Traits, class ModelBase>
+	typename sftree_facade_qtbase<Traits, ModelBase>::ivalue_container sftree_facade_qtbase<Traits, ModelBase>::create_container(const self_type * self)
+	{
+		// For hashed_unique:
+		//  The first element of this tuple indicates the minimum number of buckets
+		//  set up by the index on construction time.
+		//  If the default value 0 is used, an implementation defined number is used instead.
+		// For random_access: No arguments
+		return ivalue_container(
+			typename ivalue_container::ctor_args_list(
+				typename ivalue_container::template nth_index<0>::type::ctor_args(0, get_name_type(&self->m_traits), path_hash_type(), path_equal_to_type()),
+				typename ivalue_container::template nth_index<1>::type::ctor_args()
+		    )
+		);
+	}
+
+	template <class Traits, class ModelBase>
+	typename sftree_facade_qtbase<Traits, ModelBase>::ivalue_container sftree_facade_qtbase<Traits, ModelBase>::create_container(ext::noinit_type)
+	{
+		// For hashed_unique:
+		//  The first element of this tuple indicates the minimum number of buckets
+		//  set up by the index on construction time.
+		//  If the default value 0 is used, an implementation defined number is used instead.
+		// For random_access: No arguments
+		return ivalue_container(
+			typename ivalue_container::ctor_args_list(
+				typename ivalue_container::template nth_index<0>::type::ctor_args(0, get_name_type(nullptr), path_hash_type(), path_equal_to_type()),
+				typename ivalue_container::template nth_index<1>::type::ctor_args()
+		    )
+		);
+	}
+
+	/************************************************************************/
+	/*                   node_accessor_type definition                      */
 	/************************************************************************/
 
 	/// special predicate proxy that passes arguments as is, except for page references/pointers:
@@ -612,13 +696,6 @@ namespace viewed
 	/*                  Methods implementations                             */
 	/************************************************************************/
 	template <class Traits, class ModelBase>
-	const typename sftree_facade_qtbase<Traits, ModelBase>::ivalue_container sftree_facade_qtbase<Traits, ModelBase>::ms_empty_container;
-
-	template <class Traits, class ModelBase>
-	const typename sftree_facade_qtbase<Traits, ModelBase>::pathview_type sftree_facade_qtbase<Traits, ModelBase>::ms_empty_path;
-
-
-	template <class Traits, class ModelBase>
 	template <class Functor>
 	void sftree_facade_qtbase<Traits, ModelBase>::for_each_child_page(page_type & page, Functor && func)
 	{
@@ -636,7 +713,8 @@ namespace viewed
 	template <class RandomAccessIterator>
 	void sftree_facade_qtbase<Traits, ModelBase>::group_by_paths(RandomAccessIterator first, RandomAccessIterator last)
 	{
-		std::sort(first, last, path_group_pred);
+		//std::sort(first, last, path_group_pred);
+		std::stable_sort(first, last, path_group_pred);
 	}
 
 	/************************************************************************/
@@ -707,7 +785,6 @@ namespace viewed
 		else
 		{
 			auto & element = get_ielement_ptr(parent);
-			auto & children = get_children(element);
 			auto count = get_children_count(element);
 
 			if (count < row)
@@ -747,7 +824,7 @@ namespace viewed
 
 		for (;;)
 		{
-			std::tie(type, name, curpath) = parse_path(path, curpath);
+			std::tie(type, name, curpath) = m_traits.parse_path(path, curpath);
 
 			auto & children = cur_page->children;
 			auto & seq_view = children.template get<by_seq>();
@@ -1181,6 +1258,8 @@ namespace viewed
 	void sftree_facade_qtbase<Traits, ModelBase>::sort_by(Args && ... args)
 	{
 		m_sort_pred = sort_pred_type(std::forward<Args>(args)...);
+		sftree_detail::set_traits(&m_sort_pred, &m_traits);
+
 		sort_and_notify();
 	}
 
@@ -1199,7 +1278,7 @@ namespace viewed
 		{
 			// with current path parse each element:
 			auto && item_ptr = *ctx.first;
-			auto [type, name, newpath] = parse_path(this->get_path(*item_ptr), ctx.path);
+			auto [type, name, newpath] = m_traits.parse_path(m_traits.get_path(*item_ptr), ctx.path);
 			if (type == LEAF)
 			{
 				// if it's leaf: add to children
@@ -1214,12 +1293,12 @@ namespace viewed
 				newctx.first = ctx.first;
 
 				// extract node sub-range
-				auto is_child = [this, &path = ctx.path, &name](const auto * item) { return this->is_child(path, name, this->get_path(*item)); };
+				auto is_child = [this, &path = newctx.path](const auto * item) { return m_traits.is_child(m_traits.get_path(*item), path); };
 				newctx.last = std::find_if_not(ctx.first, ctx.last, is_child);
 				// create new page
-				auto page_ptr = std::make_unique<page_type>();
+				auto page_ptr = std::make_unique<page_type>(this);
 				page_ptr->parent = &page;
-				traits_type::set_name(page_ptr->node, std::move(ctx.path), std::move(name));
+				m_traits.set_name(page_ptr->node, std::move(ctx.path), std::move(name));
 				// process child node recursively
 				reset_page(*page_ptr, newctx);
 
@@ -1299,7 +1378,7 @@ namespace viewed
 		{
 			auto && item = *ctx.erased_first;
 			std::uintptr_t type;
-			std::tie(type, ctx.erased_name, ctx.erased_path) = parse_path(this->get_path(*item), ctx.path);
+			std::tie(type, ctx.erased_name, ctx.erased_path) = m_traits.parse_path(m_traits.get_path(*item), ctx.path);
 			if (type == PAGE) return std::tie(ctx.erased_name, ctx.erased_path);
 
 			auto it = container.find(ctx.erased_name);
@@ -1334,7 +1413,7 @@ namespace viewed
 		{
 			auto && item = *ctx.updated_first;
 			std::uintptr_t type;
-			std::tie(type, ctx.updated_name, ctx.updated_path) = parse_path(this->get_path(*item), ctx.path);
+			std::tie(type, ctx.updated_name, ctx.updated_path) = m_traits.parse_path(m_traits.get_path(*item), ctx.path);
 			if (type == PAGE) return std::tie(ctx.updated_name, ctx.updated_path);
 
 			auto it = container.find(ctx.updated_name);
@@ -1370,7 +1449,7 @@ namespace viewed
 		{
 			auto && item = *ctx.inserted_first;
 			std::uintptr_t type;
-			std::tie(type, ctx.inserted_name, ctx.inserted_path) = parse_path(this->get_path(*item), ctx.path);
+			std::tie(type, ctx.inserted_name, ctx.inserted_path) = m_traits.parse_path(m_traits.get_path(*item), ctx.path);
 			if (type == PAGE) return std::tie(ctx.inserted_name, ctx.inserted_path);
 
 			decltype(container.begin()) it; bool inserted;
@@ -1399,16 +1478,16 @@ namespace viewed
 
 		for (;;)
 		{
-			// step 1: with current path parse_path from each element from groups:
+			// step 1: with current ctx.path parse_path each element from 3 groups:
 			// * if it's leaf - we process it: add to children, remember it's index into updated/removed ones. removal is done later
 			// * if it's page - we break out.
-			// those method update context with their process: inserted_first, updated_first, erased_first, etc
+			// those method update context with their processing: inserted_first, updated_first, erased_first, etc
 			process_inserted(page, ctx);
 			process_updated(page, ctx);
 			process_erased(page, ctx);
 
-			// step 2: At this point only pages are at front of ranges
-			//  find max according to their path name, extract 3 sub-ranges according to that name from all 3 groups, and recursively process them
+			// step 2: At this point only nodes(aka pages) are at front of ranges
+			//  find biggest according to their path/name, extract 3 sub-ranges according to that name from all 3 groups, and recursively process them
 			auto newpath = std::max({ctx.erased_path, ctx.updated_path, ctx.inserted_path}, path_less);
 			auto name = std::max({ctx.erased_name, ctx.updated_name, ctx.inserted_name}, path_less);
 			// if name is empty - we actually processed all elements
@@ -1416,7 +1495,7 @@ namespace viewed
 			// prepare new context - for extracted page
 			auto newctx = copy_context(ctx, std::move(newpath));
 			// extract sub-ranges, also update iterators in current context, those elements will be processed in recursive call
-			auto is_child = [this, &path, &name](auto && item) { return this->is_child(this->get_path(*item), path, name); };
+			auto is_child = [this, &path = newctx.path](auto && item) { return m_traits.is_child(m_traits.get_path(*item), path); };
 			ctx.inserted_first = std::find_if_not(ctx.inserted_first, ctx.inserted_last, is_child);
 			ctx.updated_first  = std::find_if_not(ctx.updated_first,  ctx.updated_last,  is_child);
 			ctx.erased_first   = std::find_if_not(ctx.erased_first,   ctx.erased_last,   is_child);
@@ -1445,11 +1524,11 @@ namespace viewed
 					// Element was a leaf, but we want a page now, replace it with new page.
 					// This can happen on upsert operation with something like: "folder" -> "folder/file"
 					assert(ctx.updated_diff or ctx.inserted_diff);
-					auto child = std::make_unique<page_type>();
+					auto child = std::make_unique<page_type>(this);
 					child_page = child.get();
 
 					child_page->parent = &page;
-					traits_type::set_name(child_page->node, std::move(path), std::move(name));
+					m_traits.set_name(child_page->node, std::move(path), std::move(name));
 					container.replace(it, std::move(child));
 				}
 			}
@@ -1457,18 +1536,18 @@ namespace viewed
 			{
 				// if creating new page - there definitely was inserted or updated element
 				assert(ctx.updated_diff or ctx.inserted_diff);
-				auto child = std::make_unique<page_type>();
+				auto child = std::make_unique<page_type>(this);
 				child_page = child.get();
 
 				child_page->parent = &page;
-				traits_type::set_name(child_page->node, std::move(path), std::move(name));
+				m_traits.set_name(child_page->node, std::move(path), std::move(name));
 				std::tie(it, inserted) = container.insert(std::move(child));
 			}			
 
 			// step 3: process child recursively
 			update_page_and_notify(*child_page, newctx);
 
-			// step 4: the child page itself is our child and as leafs is inserted/updated
+			// step 4: the child page itself is our child, and as leafs is inserted/updated
 			auto seqit = container.template project<by_seq>(it);
 			auto pos = seqit - seq_view.begin();
 			// if page does not have any children - it should be removed
@@ -1661,7 +1740,7 @@ namespace viewed
 		}
 
 		// at that point we removed erased elements, but we need to rearrange boost::multi_index_container via rearrange method
-		// and it expects all elements that it has - we need to add removed ones at the end of rearranged array - and them we will remove them from container.
+		// and it expects all elements that it has - we need to add removed ones at the end of rearranged array - and then we will remove them from container.
 		// [rfirst; rlast) - elements to be removed.
 		auto rfirst = nlast;
 		auto rlast = rfirst;

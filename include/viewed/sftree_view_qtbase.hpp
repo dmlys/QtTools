@@ -173,11 +173,11 @@ namespace viewed
 		auto inserted_first = inserted.begin();
 		auto inserted_last  = inserted.end();
 
-		base_type::group_by_paths(erased_first, erased_last);
-		base_type::group_by_paths(updated_first, updated_last);
-		base_type::group_by_paths(inserted_first, inserted_last);
+		this->group_by_paths(erased_first, erased_last);
+		this->group_by_paths(updated_first, updated_last);
+		this->group_by_paths(inserted_first, inserted_last);
 
-		return base_type::update_data_and_notify(
+		return this->update_data_and_notify(
 		    erased_first, erased_last,
 		    updated_first, updated_last,
 		    inserted_first, inserted_last);

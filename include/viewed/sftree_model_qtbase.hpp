@@ -36,10 +36,6 @@ namespace viewed
 		using typename base_type::page_type;
 
 	protected:
-		using base_type::get_path;
-		using base_type::path_group_pred;
-
-	protected:
 		void fill_children_leafs(const page_type & page, std::vector<const leaf_type *> & elements);
 
 	public:
@@ -124,14 +120,14 @@ namespace viewed
 		this->group_by_paths(erased_first, erased_last);
 		this->group_by_paths(el_first, el_last);
 
-		auto leaf_equal = [](auto && l1, auto && l2) { return base_type::path_equal_to(get_path(*l1), get_path(*l2)); };
+		auto leaf_equal = [traits_ptr = &this->m_traits](auto && l1, auto && l2) { return base_type::path_equal_to(traits_ptr->get_path(*l1), traits_ptr->get_path(*l2)); };
 		el_last = std::unique(el_first, el_last, leaf_equal);
 
 
-		auto pred = [erased_first, erased_last](auto & ptr)
+		auto pred = [this, erased_first, erased_last](auto & ptr)
 		{
 			// e1 - from [erased_first, erased-last), e2 - from ptr
-			auto pred = [](auto * e1, auto * e2) { return path_group_pred(viewed::unmark_pointer(e1), e2); };
+			auto pred = [this](auto * e1, auto * e2) { return this->path_group_pred(viewed::unmark_pointer(e1), e2); };
 
 			// not (*it < ptr.get())
 			// not (ptr.get() < *it) => *it === ptr
@@ -180,14 +176,14 @@ namespace viewed
 		this->group_by_paths(ex_first, ex_last);
 		this->group_by_paths(el_first, el_last);
 
-		auto leaf_equal = [](auto && l1, auto && l2) { return base_type::path_equal_to(get_path(*l1), get_path(*l2)); };
+		auto leaf_equal = [traits_ptr = &this->m_traits](auto && l1, auto && l2) { return base_type::path_equal_to(traits_ptr->get_path(*l1), traits_ptr->get_path(*l2)); };
 		el_last = std::unique(el_first, el_last, leaf_equal);
 
 
-		auto pred = [ex_first, ex_last](auto & ptr)
+		auto pred = [this, ex_first, ex_last](auto & ptr)
 		{
 			// e1 - from [erased_first, erased-last), e2 - from ptr
-			auto pred = [](auto * e1, auto * e2) { return path_group_pred(e1, e2); };
+			auto pred = [this](auto * e1, auto * e2) { return this->path_group_pred(e1, e2); };
 
 			// not (*it < ptr.get())
 			// not (ptr.get() < *it) => *it === ptr
