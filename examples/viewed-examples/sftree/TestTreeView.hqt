@@ -1,0 +1,96 @@
+﻿#pragma once
+#include <QtWidgets/QFrame>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QTreeView>
+
+#include <QtTools/HeaderControlModel.hqt>
+#include <QtTools/Delegates/SearchDelegate.hpp>
+
+#include "AbstractTestModel.hqt"
+
+class TestTreeView : public QFrame
+{
+	Q_OBJECT
+
+private:
+	using base_type = QFrame;
+
+protected:
+	AbstractTestModel * m_model = nullptr;
+
+	/// table headers customization/tracking
+	QtTools::HeaderControlModel * m_headerModel = nullptr;
+	QtTools::HeaderSectionInfoList * m_headerConfig = nullptr;
+	QtTools::Delegates::SearchDelegate * m_nameDelegate = nullptr;
+
+	// child widgets/graphical objects
+	QVBoxLayout * m_verticalLayout = nullptr;
+	QLineEdit   * m_rowFilter = nullptr;
+	QTreeView   * m_treeView = nullptr;
+
+	/// current filter string
+	QString m_filterString;
+	/// current sorting settings
+	int m_sortColumn = -1;
+	Qt::SortOrder m_sortOrder = Qt::AscendingOrder;
+
+protected:
+	virtual void ModelChanged();
+	virtual void OnFilterChanged();
+
+protected:
+	virtual void ConnectModel();
+	virtual void DisconnectModel();
+
+public:
+	/// returns model, serving horizontal QHeaderView.
+	/// Model created in Init call, this widget widget is a parent
+	QtTools::HeaderControlModel * GetHeaderModel() const { return m_headerModel; }
+
+	/// main layout
+	QVBoxLayout * GetLayout() const { return m_verticalLayout; }
+	/// filter field
+	QLineEdit * GetFilterWidget() const { return m_rowFilter; }
+	/// tree view
+	QTreeView * GetTreeView() const { return m_treeView; }
+
+public:
+	/// opens table headers configuration widget,
+	virtual void OpenHeaderConfigurationWidget();
+	/// opens table settings widget, for now it's OpenHeaderConfigurationWidget
+	virtual void ViewSettings();
+	/// adjusts resizes table columns by content
+	virtual void ResizeColumnsToContents();
+
+public:
+	virtual void SetFilter(QString newFilter);
+	virtual auto GetFilter() const -> QString { return m_filterString; }
+	Q_SIGNAL void FilterChanged(QString newFilter);
+
+	virtual void Sort(int column, Qt::SortOrder order);
+	virtual auto GetSorting() -> std::pair<int, Qt::SortOrder> const { return {m_sortColumn, m_sortOrder}; }
+	Q_SIGNAL void SortingChanged(int column, Qt::SortOrder order);
+
+	/// initializes widget
+	/// @Param model specifies model, if null - deinitializes widget
+	virtual void SetModel(AbstractTestModel * model);
+	virtual auto GetModel() const -> AbstractTestModel * { return m_model; }
+
+	/// initializes headers tracking, additionally sets headerConf configuration, see also QtTools::HeaderControlModel.
+	/// TestTreeView must be initialized before calling this method.
+	virtual void InitHeaderTracking(QtTools::HeaderSectionInfoList * headerConf = nullptr);
+
+	/// desired size
+	QSize sizeHint() const override;
+
+public:
+	TestTreeView(QWidget * parent = nullptr);
+	~TestTreeView();
+
+protected:
+	void setupUi();
+	void retranslateUi();
+	void connectSignals();
+};

@@ -1,0 +1,89 @@
+﻿#pragma once
+#include "TestTreeEntity.hpp"
+#include <QtCore/QAbstractItemModel>
+
+
+class AbstractTestModel : public QAbstractItemModel
+{
+	Q_OBJECT;
+
+private:
+	using base_type = QAbstractItemModel;
+
+protected:
+	std::vector<unsigned> m_columns = {0, 1, 2};
+
+	QString m_filterStr;
+	Qt::SortOrder m_sortOrder = Qt::AscendingOrder;
+	int m_sortColumn = -1;
+
+protected:
+	void SetColumns(std::vector<unsigned> columns);
+
+public:
+	// view index - index of qt modelm that column of QModelIndex
+	// meta index - index as used in meta
+	inline  unsigned ViewToMetaIndex(std::size_t view_index) const { /*assert(view_index < m_columns.size());*/ return m_columns[view_index]; }
+	virtual unsigned MetaToViewIndex(unsigned meta_index) const;
+
+protected:
+	virtual void FilterBy(QString expr) = 0;
+	virtual void SortBy(int column, Qt::SortOrder order) = 0;
+
+public:
+	virtual QString FieldName(int section) const;
+	virtual QString FieldName(const QModelIndex & index) const;
+	virtual QString GetString(const QModelIndex & index) const;
+	virtual QString GetStringShort(const QModelIndex & index) const;
+
+public:
+	void SetFilter(QString expr);
+	auto GetFilter() const noexcept { return m_filterStr; }
+
+	void SetSorting(int column, Qt::SortOrder order = Qt::AscendingOrder) { sort(column, order); }
+	auto GetSorting() const noexcept { return std::make_pair(m_sortColumn, m_sortOrder); }
+
+Q_SIGNALS:
+	void SortingChanged(int column, Qt::SortOrder order);
+	void FilterChanged(QString expr);
+
+public:
+	// implemented by derived
+	virtual QVariant GetEntity(const QModelIndex & index) const = 0;
+	virtual QVariant GetItem(const QModelIndex & index) const = 0;
+	virtual int FullRowCount(const QModelIndex & parent = QModelIndex()) const = 0;
+	int rowCount(const QModelIndex & parent = QModelIndex()) const override = 0;
+
+public:
+	int columnCount(const QModelIndex & parent = QModelIndex()) const override;
+	void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) final override;
+
+	// some default implementations with help of GetStringShort / GetFieldName / others
+	QVariant data(const QModelIndex & index, int role = Qt::DisplayRole) const override;
+	QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
+
+public:
+	using base_type::base_type;
+};
+
+/// AbstractItemModel for tables
+class AbstractTableTestModel : public AbstractTestModel
+{
+	Q_OBJECT;
+
+private:
+	using base_type = AbstractTestModel;
+
+public:
+	Qt::ItemFlags flags(const QModelIndex & index) const override;
+	QModelIndex index(int row, int column, const QModelIndex & parent = QModelIndex()) const override;
+	QModelIndex parent(const QModelIndex & child) const override;
+	QModelIndex sibling(int row, int column, const QModelIndex & idx) const override;
+	bool hasChildren(const QModelIndex & parent) const override;
+
+ private:
+	 using base_type::base_type;
+};
+
+Q_DECLARE_METATYPE(      test_tree_entity *)
+Q_DECLARE_METATYPE(const test_tree_entity *)

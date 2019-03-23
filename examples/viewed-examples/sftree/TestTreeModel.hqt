@@ -1,0 +1,124 @@
+#pragma once
+#include "AbstractTestModel.hqt"
+#include "TestTreeEntityContainer.hpp"
+#include <viewed/sftree_view_qtbase.hpp>
+#include <viewed/sftree_model_qtbase.hpp>
+#include <viewed/sftree_string_traits.hpp>
+
+/// traits class for tree model, it describes how to work with our type
+/// see sftree_facade_qtbase for documentation
+struct test_entity_sftree_traits : viewed::sftree_qstring_traits
+{
+	using leaf_type = test_tree_entity;
+	using node_type = test_tree_entity;
+
+	// those must be static	
+	void set_name(node_type & node, const pathview_type & path, const pathview_type & name) const { node.filename = name; }
+	pathview_type get_name(const leaf_type & leaf) const { return sftree_qstring_traits::get_name(leaf.filename); }
+	//static pathview_type get_name(const node_type & node) { return ::get_name(&node.filename); }
+	pathview_type get_path(const leaf_type & leaf) const { return leaf.filename; }
+
+	class test_tree_sorter;
+	class test_tree_filter;
+
+	using sort_pred_type = test_tree_sorter;
+	using filter_pred_type = test_tree_filter;
+};
+
+class test_entity_sftree_traits::test_tree_sorter
+{
+	using leaf_type = test_tree_entity;
+	using node_type = leaf_type;
+
+	using path_type = QString;
+	using pathview_type = QStringRef;
+
+	using leaf_compare_function = bool(*)(const leaf_type & l1, const leaf_type & l2) noexcept;
+	using node_compare_function = bool(*)(const node_type & l1, const node_type & l2) noexcept;
+
+	leaf_compare_function m_leaf_compare = nullptr;
+	node_compare_function m_node_compare = nullptr;
+
+	template <class Entity, class Type, Type Entity::*member, class Pred>
+	static bool compare_entity(const Entity & e1, const Entity & e2) noexcept;
+
+public:
+	void reset(viewed::nosort_type);
+	void reset(unsigned type, Qt::SortOrder order);
+
+public:
+	template <unsigned ... vals> using hint = std::integer_sequence<unsigned, vals...>;
+	bool operator()(const node_type & p1, const node_type & p2, hint<viewed::PAGE, viewed::PAGE>) const noexcept { return m_node_compare(p1, p2); }
+	bool operator()(const node_type & p1, const leaf_type & l2, hint<viewed::PAGE, viewed::LEAF>) const noexcept { return true; }
+	bool operator()(const leaf_type & l1, const node_type & n2, hint<viewed::LEAF, viewed::PAGE>) const noexcept { return false; }
+	bool operator()(const leaf_type & l1, const leaf_type & l2, hint<viewed::LEAF, viewed::LEAF>) const noexcept { return m_leaf_compare(l1, l2); }
+
+//  or if node/leaf order does not matter - can be done simpler, ignoring hint:
+//	template <class Hint>
+//	bool operator()(const leaf_type & l1, const leaf_type & l2, Hint) const { return m_leaf_compare(l1, l2); }
+//
+//  or even like this:
+//  bool operator()(const leaf_type & l1, const leaf_type & l2) const noexcept { return m_leaf_compare(l1, l2); }
+
+//  if leaf/node different types
+//	inline bool operator()(const node_type & p1, const node_type & p2) const noexcept { return m_node_compare(p1, p2); }
+//	inline bool operator()(const node_type & p1, const leaf_type & l2) const noexcept { return true; }
+//	inline bool operator()(const leaf_type & l1, const node_type & p2) const noexcept { return false; }
+//	inline bool operator()(const leaf_type & l1, const leaf_type & l2) const noexcept { return m_leaf_compare(l1, l2); }
+
+	inline explicit operator bool() const noexcept { return m_leaf_compare; }
+
+public:
+	test_tree_sorter() : test_tree_sorter(viewed::nosort) {}
+	test_tree_sorter(viewed::nosort_type val) { reset(val); }
+	test_tree_sorter(unsigned type, Qt::SortOrder order) { reset(type, order); }
+};
+
+class test_entity_sftree_traits::test_tree_filter
+{
+	using leaf_type = test_tree_entity;
+	using node_type = leaf_type;
+
+	using path_type = QString;
+	using pathview_type = QStringRef;
+
+	path_type m_filterStr;
+
+public:
+	viewed::refilter_type set_expr(QString expr);
+
+	bool always_matches() const noexcept { return m_filterStr == ""; }
+	bool matches(const pathview_type & name) const noexcept;
+
+//	template <class Hint>
+//	inline bool operator()(const leaf_type & l, Hint) const noexcept { return matches(&l.filename); }
+	inline bool operator()(const leaf_type & l) const noexcept { return matches(&l.filename); }
+	//inline bool operator()(const node_type & p) const noexcept { return matches(&p.filename); }
+	inline explicit operator bool() const noexcept { return not always_matches(); }
+};
+
+
+
+class TestTreeModelBase : public viewed::sftree_facade_qtbase<test_entity_sftree_traits, AbstractTestModel>
+{
+	using base_type = viewed::sftree_facade_qtbase<test_entity_sftree_traits, AbstractTestModel>;
+
+protected:
+	virtual void recalculate_page(page_type & page) override;
+
+	virtual void FilterBy(QString expr) override;
+	virtual void SortBy(int column, Qt::SortOrder order) override;
+
+public:
+	// implemented by derived
+	virtual QVariant GetEntity(const QModelIndex & index) const override;
+	virtual QVariant GetItem(const QModelIndex & index) const override;
+	virtual int FullRowCount(const QModelIndex & parent = QModelIndex()) const override;
+
+public:
+	using base_type::base_type;
+};
+
+
+using TestTreeModel     = viewed::sftree_model_qtbase<TestTreeModelBase>;
+using TestTreeViewModel = viewed::sftree_view_qtbase<TestTreeContainer, TestTreeModelBase>;

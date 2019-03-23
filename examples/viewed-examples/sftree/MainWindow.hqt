@@ -1,0 +1,58 @@
+#pragma once
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QGroupBox>
+#include <QtWidgets/QSplitter>
+#include <QtWidgets/QBoxLayout>
+#include <QtWidgets/QMainWindow>
+
+#include "TestTreeModel.hqt"
+#include "TestTreeView.hqt"
+
+class MainWindow : public QMainWindow
+{
+	Q_OBJECT;
+
+protected:
+	std::shared_ptr<TestTreeModel> m_model;
+	std::shared_ptr<TestTreeContainer> m_container;
+	std::shared_ptr<TestTreeViewModel> m_viewModel1, m_viewModel2;
+
+protected:
+	TestTreeView * m_view1, * m_view2, * m_view3;
+	QPushButton * m_assign1, * m_assign2, * m_assign3;
+	QPushButton * m_upsert1, * m_upsert2, * m_upsert3;
+	QPushButton * m_clear1,  * m_clear2,  * m_clear3;
+
+public:
+	QSize sizeHint() const override;
+
+protected:
+	virtual auto GenerateAssignData() const -> std::vector<test_tree_entity>;
+	virtual auto GenerateUpsertData() const -> std::vector<test_tree_entity>;
+
+protected:
+	virtual void ClearData(TestTreeModel & model);
+	virtual void AssignData(TestTreeModel & model);
+	virtual void UpsertData(TestTreeModel & model);
+
+	virtual void ClearData(TestTreeViewModel & model);
+	virtual void AssignData(TestTreeViewModel & model);
+	virtual void UpsertData(TestTreeViewModel & model);
+
+public:
+	MainWindow(QWidget * parent = nullptr);
+
+protected:
+//	virtual void setupToolBars();
+//	virtual void setupStatusBar();
+//	virtual void setupMenu();
+
+	virtual void setupUi();
+	virtual void setupModels();
+
+//	virtual void retranslateToolBars();
+//	virtual void retranslateStatusBar();
+//	virtual void retranslateUi();
+
+	virtual void connectSignals();
+};
