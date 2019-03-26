@@ -39,7 +39,6 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
-#pragma GCC diagnostic ignored "-Wsign-compare"
 #endif
 
 namespace viewed
@@ -408,14 +407,14 @@ namespace viewed
 		void inverse_index_array(int_vector & inverse, int_vector::iterator first, int_vector::iterator last, int offset);
 
 	protected:
-		/// merges m_store's [middle, last) into [first, last) according to m_sort_pred. stable.
+		/// merges [middle, last) into [first, last) according to m_sort_pred, stable.
 		/// first, middle, last - is are one range, as in std::inplace_merge
 		/// if resort_old is true it also resorts [first, middle), otherwise it's assumed it's sorted
 		virtual void merge_newdata(
 			ivalue_ptr_iterator first, ivalue_ptr_iterator middle, ivalue_ptr_iterator last,
 			bool resort_old = true);
 		
-		/// merges m_store's [middle, last) into [first, last) according to m_sort_pred. stable.
+		/// merges [middle, last) into [first, last) according to m_sort_pred, stable.
 		/// first, middle, last - is are one range, as in std::inplace_merge
 		/// if resort_old is true it also resorts [first, middle), otherwise it's assumed it's sorted
 		/// 
@@ -425,14 +424,14 @@ namespace viewed
 			int_vector::iterator ifirst, int_vector::iterator imiddle, int_vector::iterator ilast,
 			bool resort_old = true);
 		
-		/// sorts m_store's [first; last) with m_sort_pred, stable sort
+		/// sorts [first; last) with m_sort_pred, stable sort
 		virtual void stable_sort(ivalue_ptr_iterator first, ivalue_ptr_iterator last);
-		/// sorts m_store's [first; last) with m_sort_pred, stable sort
+		/// sorts [first; last) with m_sort_pred, stable sort
 		/// range [ifirst; ilast) must be permuted the same way as range [first; last)
 		virtual void stable_sort(ivalue_ptr_iterator first, ivalue_ptr_iterator last,
 		                         int_vector::iterator ifirst, int_vector::iterator ilast);
 
-		/// sorts m_store's [first; last) with m_sort_pred, stable sort
+		/// sorts m_store with m_sort_pred, stable sort
 		/// emits qt layoutAboutToBeChanged(..., VerticalSortHint), layoutUpdated(..., VerticalSortHint)
 		virtual void sort_and_notify();
 		virtual void sort_and_notify(page_type & page, resort_context & ctx);
@@ -446,7 +445,7 @@ namespace viewed
 		/// emits qt layoutAboutToBeChanged(..., NoLayoutChangeHint), layoutUpdated(..., NoLayoutChangeHint)
 		virtual void refilter_incremental_and_notify();
 		virtual void refilter_incremental_and_notify(page_type & page, refilter_context & ctx);
-		/// fills m_store from owner with values passing m_filter_pred and sorts them according to m_sort_pred
+		/// completely refilters m_store with values passing m_filter_pred and sorts them according to m_sort_pred
 		/// emits qt layoutAboutToBeChanged(..., NoLayoutChangeHint), layoutUpdated(..., NoLayoutChangeHint)
 		virtual void refilter_full_and_notify();
 		virtual void refilter_full_and_notify(page_type & page, refilter_context & ctx);
@@ -1271,8 +1270,6 @@ namespace viewed
 	void sftree_facade_qtbase<Traits, ModelBase>::reset_page(page_type & page, reset_context & ctx)
 	{
 		auto & container = page.children;
-		auto & seq_view = container.template get<by_seq>();
-		auto seq_ptr_view = seq_view | ext::outdirected;
 
 		while (ctx.first != ctx.last)
 		{
@@ -1308,6 +1305,9 @@ namespace viewed
 		}
 
 		// rearrange children according to filtering/sorting criteria
+		auto & seq_view = container.template get<by_seq>();
+		auto seq_ptr_view = seq_view | ext::outdirected;
+
 		ivalue_ptr_vector & refs = *ctx.vptr_array;
 		refs.assign(seq_ptr_view.begin(), seq_ptr_view.end());
 

@@ -367,4 +367,23 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(node_leaf_transformation, model_type, test_types)
 	BOOST_CHECK_EQUAL(model.rowCount(idx), 1);
 }
 
+BOOST_AUTO_TEST_CASE(model_view_reset)
+{
+	auto data =
+	{
+		"folder/file1.txt",
+	    "folder/file2.txt",
+	    "folder/inner/file1.txt",
+	};
+
+	auto container = std::make_shared<container_type>();
+	tree_view_model<std::variant<less_sorter, greater_sorter>, filter> model(container);
+
+	container->assign(data);
+	BOOST_CHECK_EQUAL(model.rowCount(), 1);
+
+	model.reinit_view_and_notify();
+	BOOST_CHECK_EQUAL(model.rowCount(), 1);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
