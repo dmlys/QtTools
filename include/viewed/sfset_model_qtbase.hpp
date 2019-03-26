@@ -35,7 +35,6 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
-#pragma GCC diagnostic ignored "-Wsign-compare"
 #endif
 
 
@@ -107,15 +106,13 @@ namespace viewed
 		{
 			using result_type = std::invoke_result_t<decltype(traits_type::get_key), const value_type &>;
 			template <class Arg> decltype(auto) operator()(Arg && arg) const { return traits_type::get_key(std::forward<Arg>(arg)); }
-
-			//using result_type = std::invoke_result_t<get_key_type, const value_type &>;
 		};
 
 	protected:
 		// boost::multi_index_container is used to index elements by key and by position
 		//
 		// Because we hold data - we manage their life-time
-		// and when some values are filtered out we can't just delete them - they will be lost completly.
+		// and when some values are filtered out we can't just delete them - they will be lost completely.
 		// Instead we define visible part and shadow part.
 		// Container is partitioned is such way that first comes visible elements, after them shadowed - those who does not pass filter criteria.
 		// Whenever filter criteria changes, or elements are changed - elements are moved to/from shadow/visible part according to changes.
@@ -186,8 +183,8 @@ namespace viewed
 		/// acquires pointer to qt model, normally you would inherit both QAbstractItemModel and this class.
 		/// default implementation uses dynamic_cast
 		virtual model_type * get_model();
-		/// emits qt signal model->dataChanged about changed rows. Changred rows are defined by [first; last)
-		/// default implantation just calls get_model->dataChanged(index(row, 0), inex(row, model->columnCount)
+		/// emits qt signal model->dataChanged about changed rows. Changed rows are defined by [first; last)
+		/// default implantation just calls get_model->dataChanged(index(row, 0), index(row, model->columnCount)
 		virtual void emit_changed(int_vector::const_iterator first, int_vector::const_iterator last);
 		/// changes persistent indexes via get_model->changePersistentIndex.
 		/// [first; last) - range where range[oldIdx - offset] => newIdx.
@@ -195,14 +192,14 @@ namespace viewed
 		virtual void change_indexes(int_vector::const_iterator first, int_vector::const_iterator last, int offset);
 
 	protected:
-		/// merges m_store's [middle, last) into [first, last) according to m_sort_pred. stable.
+		/// merges [middle, last) into [first, last) according to m_sort_pred, stable.
 		/// first, middle, last - is are one range, as in std::inplace_merge
 		/// if resort_old is true it also resorts [first, middle), otherwise it's assumed it's sorted
 		virtual void merge_newdata(
 			value_ptr_iterator first, value_ptr_iterator middle, value_ptr_iterator last,
 			bool resort_old = true);
 
-		/// merges m_store's [middle, last) into [first, last) according to m_sort_pred. stable.
+		/// merges [middle, last) into [first, last) according to m_sort_pred, stable.
 		/// first, middle, last - is are one range, as in std::inplace_merge
 		/// if resort_old is true it also resorts [first, middle), otherwise it's assumed it's sorted
 		///
@@ -213,14 +210,14 @@ namespace viewed
 			bool resort_old = true);
 
 
-		/// sorts m_store's [first; last) with m_sort_pred, stable sort
+		/// sorts [first; last) with m_sort_pred, stable sort
 		virtual void stable_sort(value_ptr_iterator first, value_ptr_iterator last);
-		/// sorts m_store's [first; last) with m_sort_pred, stable sort
+		/// sorts [first; last) with m_sort_pred, stable sort
 		/// range [ifirst; ilast) must be permuted the same way as range [first; last)
 		virtual void stable_sort(value_ptr_iterator first, value_ptr_iterator last,
 		                         int_vector::iterator ifirst, int_vector::iterator ilast);
 
-		/// sorts m_store's [first; last) with m_sort_pred, stable sort
+		/// sorts m_store with m_sort_pred, stable sort
 		/// emits qt layoutAboutToBeChanged(..., VerticalSortHint), layoutUpdated(..., VerticalSortHint)
 		virtual void sort_and_notify();
 		/// get pair of iterators that hints where to search element
@@ -234,7 +231,7 @@ namespace viewed
 		/// removes elements not passing m_filter_pred from m_store
 		/// emits qt layoutAboutToBeChanged(..., NoLayoutChangeHint), layoutUpdated(..., NoLayoutChangeHint)
 		virtual void refilter_incremental_and_notify();
-		/// fills m_store from owner with values passing m_filter_pred and sorts them according to m_sort_pred
+		/// completely refilters m_store with values passing m_filter_pred and sorts them according to m_sort_pred
 		/// emits qt layoutAboutToBeChanged(..., NoLayoutChangeHint), layoutUpdated(..., NoLayoutChangeHint)
 		virtual void refilter_full_and_notify();
 
@@ -467,7 +464,7 @@ namespace viewed
 		viewed::inverse_index_array(ifirst, ilast, offset);
 		change_indexes(ifirst, ilast, offset);
 
-		container.rearrange(boost::make_transform_iterator(first, make_ref));
+		seq_view.rearrange(boost::make_transform_iterator(first, make_ref));
 
 		Q_EMIT model->layoutChanged(model_type::empty_model_list, model->VerticalSortHint);
 	}

@@ -64,11 +64,9 @@ namespace QtTools::NotificationSystem
 	}
 
 	NotificationModel::NotificationModel(std::shared_ptr<NotificationStore> store, QObject * parent /* = nullptr */)
-	    : base_type(parent), view_type(store.get())
+	    : base_type(parent), view_type(std::move(store))
 	{
 		assert(store);
-
-		m_owner_store = std::move(store);
 
 		// from view_base_type
 		connect_signals();
@@ -106,7 +104,7 @@ namespace QtTools::NotificationSystem
 
 	int NotificationModel::FullRowCount() const
 	{
-		return qint(m_owner_store->size());
+		return qint(m_owner->size());
 	}
 
 	int NotificationModel::rowCount(const QModelIndex & parent /*= QModelIndex()*/) const

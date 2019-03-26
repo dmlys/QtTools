@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <memory> // for std::shared_ptr
 #include <vector>
 #include <ext/noinit.hpp>
 #include <ext/range/range_traits.hpp>
@@ -119,7 +120,7 @@ namespace viewed
 		using reverse_iterator = const_reverse_iterator;
 
 	protected:
-		container_type * m_owner = nullptr; // pointer to owning container, can be used by derived classes
+		std::shared_ptr<container_type> m_owner = nullptr; // pointer to owning container, can be used by derived classes
 		store_type m_store; // view store, can be used by derived classes
 
 		/// raii connections
@@ -149,7 +150,7 @@ namespace viewed
 
 	public:
 		/// returns pointer to owning container
-		container_type * get_owner() const noexcept { return m_owner; }
+		const auto & get_owner() const noexcept { return m_owner; }
 
 		/// connects container signals to appropriate handlers
 		virtual void connect_signals();
@@ -204,10 +205,10 @@ namespace viewed
 		void sorted_erase_records(const signal_range_type & sorted_erased);
 
 	protected:
-		view_base(ext::noinit_type noinit, container_type * owner) : m_owner(owner) {}
+		view_base(ext::noinit_type noinit, std::shared_ptr<container_type> owner) : m_owner(std::move(owner)) {}
 
 	public:
-		view_base(container_type * owner) : view_base(ext::noinit, owner) { this->init(); }
+		view_base(std::shared_ptr<container_type> owner) : view_base(ext::noinit, std::move(owner)) { this->init(); }
 		virtual ~view_base() = default;
 
 		view_base(const view_base &) = delete;

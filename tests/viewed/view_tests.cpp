@@ -21,8 +21,8 @@ namespace
 		int rowCount(const QModelIndex & parent = QModelIndex()) const override { return static_cast<int>(this->size()); }
 
 	public:
-		simple_qtmodel(container_type * cont)
-			: base_type(cont) { }
+		simple_qtmodel(std::shared_ptr<container_type> cont)
+			: base_type(std::move(cont)) { }
 	};
 
 	struct odd_filter
@@ -49,8 +49,9 @@ namespace
 	template <class container_type, class view_type>
 	static void test_aue()
 	{
-		container_type cont;
-		view_type view = &cont;
+		std::shared_ptr<container_type> cont_ptr = std::make_shared<container_type>();
+		container_type & cont = *cont_ptr;
+		view_type view(cont_ptr);
 		view.init();
 
 		std::vector<int> assign_batch1 = {10, 15, 1, 25, 100};
@@ -97,8 +98,9 @@ namespace
 	template <class container_type, class view_type>
 	static void test_aue_sof()
 	{
-		container_type cont;
-		view_type view {&cont};
+		std::shared_ptr<container_type> cont_ptr = std::make_shared<container_type>();
+		container_type & cont = *cont_ptr;
+		view_type view(cont_ptr);
 		view.init();
 
 		std::vector<int> assign_batch1 = {10, 15, 1, 25, 100};
@@ -170,9 +172,9 @@ BOOST_AUTO_TEST_CASE(sfview_qtbase_presistance_test)
 		viewed::sfview_qtbase<container_type, std::less<int>, odd_filter>
 	>;
 
-	container_type cont;
-	view_type view {&cont};
-	view.init();
+	std::shared_ptr<container_type> cont_ptr = std::make_shared<container_type>();
+	container_type & cont = *cont_ptr;
+	view_type view(cont_ptr);
 
 	std::vector<int> assign_batch1 = {10, 15, 1, 25, 100};
 	std::vector<int> upsert_batch = {1, -101};

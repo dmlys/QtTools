@@ -138,17 +138,17 @@ namespace viewed
 		virtual search_hint_type search_hint(view_pointer_type ptr) const override;
 
 	protected:
-		selectable_sfview_qtbase(ext::noinit_type noinit, container_type * owner,
+		selectable_sfview_qtbase(ext::noinit_type noinit, std::shared_ptr<container_type> owner,
 		                         sort_pred_type sort_pred = {},
 		                         filter_pred_type filter_pred = {})
-			: base_type(noinit, owner, std::move(sort_pred), std::move(filter_pred))
+			: base_type(noinit, std::move(owner), std::move(sort_pred), std::move(filter_pred))
 		{ }
 
 	public:
-		selectable_sfview_qtbase(container_type * owner,
+		selectable_sfview_qtbase(std::shared_ptr<container_type> owner,
 		                         sort_pred_type sort_pred = {},
 		                         filter_pred_type filter_pred = {})
-		    : selectable_sfview_qtbase(ext::noinit, owner, std::move(sort_pred), std::move(filter_pred))
+		    : selectable_sfview_qtbase(ext::noinit, std::move(owner), std::move(sort_pred), std::move(filter_pred))
 		{ this->init(); }
 
 		virtual ~selectable_sfview_qtbase() = default;

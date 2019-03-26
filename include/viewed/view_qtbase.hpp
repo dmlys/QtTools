@@ -94,10 +94,10 @@ namespace viewed
 		virtual void clear_view() override;
 		
 	protected:
-		view_qtbase(ext::noinit_type noinit, container_type * owner) : base_type(noinit, owner) {}
+		view_qtbase(ext::noinit_type noinit, std::shared_ptr<container_type> owner) : base_type(noinit, std::move(owner)) {}
 
 	public:
-		view_qtbase(container_type * owner) : view_qtbase(ext::noinit, owner) { this->init(); }
+		view_qtbase(std::shared_ptr<container_type> owner) : view_qtbase(ext::noinit, std::move(owner)) { this->init(); }
 		virtual ~view_qtbase() = default;
 
 		view_qtbase(const view_qtbase &) = delete;

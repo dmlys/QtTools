@@ -70,9 +70,6 @@ namespace QtTools::NotificationSystem
 		using view_type::m_filter_pred;
 
 	protected:
-		std::shared_ptr<NotificationStore> m_owner_store;
-
-	protected:
 		virtual void Refilter() override;
 
 	public:

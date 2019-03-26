@@ -158,19 +158,19 @@ namespace viewed
 		template <class ... Args> void sort_by(Args && ... args);
 
 	protected:
-		sfview_qtbase(ext::noinit_type noinit, container_type * owner,
+		sfview_qtbase(ext::noinit_type noinit, std::shared_ptr<container_type> owner,
 		              sort_pred_type sort_pred = {},
 		              filter_pred_type filter_pred = {})
-			: base_type(noinit, owner),
+			: base_type(noinit, std::move(owner)),
 		      m_sort_pred(std::move(sort_pred)),
 		      m_filter_pred(std::move(filter_pred))
 		{ }
 
 	public:
-		sfview_qtbase(container_type * owner,
+		sfview_qtbase(std::shared_ptr<container_type> owner,
 		              sort_pred_type sort_pred = {},
 		              filter_pred_type filter_pred = {})
-		    : sfview_qtbase(ext::noinit, owner, std::move(sort_pred), std::move(filter_pred))
+		    : sfview_qtbase(ext::noinit, std::move(owner), std::move(sort_pred), std::move(filter_pred))
 		{ this->init(); }
 
 		virtual ~sfview_qtbase() = default;
