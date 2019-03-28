@@ -35,7 +35,7 @@ namespace viewed
 	/// 
 	/// @Param Container - class to which this view will connect and listen updates, see view_qtbase for more description
 	/// @Param SortPred - sort predicate or std::variant of predicates,
-	///                   example: std::less<Type>, std::varaint<std::less<Type>, std::greater<Type>>
+	///                   example: std::less<Type>, std::variant<std::less<Type>, std::greater<Type>>
 	/// @Param FilterPred - filter predicate or std::variant of predicates,
 	///                     NOTE: std::variant is not supported yet for filter predicate
 	template <

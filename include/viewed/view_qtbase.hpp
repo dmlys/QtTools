@@ -120,49 +120,15 @@ namespace viewed
 	template <class Container>
 	void view_qtbase<Container>::emit_changed(int_vector::const_iterator first, int_vector::const_iterator last)
 	{
-		if (first == last) return;
-
 		auto * model = get_model();
-		int ncols = model->columnCount(model_type::invalid_index);
-
-		for (; first != last; ++first)
-		{
-			// lower index on top, higher on bottom
-			int top, bottom;
-			top = bottom = *first;
-
-			// try to find the sequences with step of 1, for example: ..., 4, 5, 6, ...
-			for (++first; first != last and *first - bottom == 1; ++first, ++bottom)
-				continue;
-
-			--first;
-
-			auto top_left = model->index(top, 0, model_type::invalid_index);
-			auto bottom_right = model->index(bottom, ncols - 1, model_type::invalid_index);
-			model->dataChanged(top_left, bottom_right, model_type::all_roles);
-		}
+		viewed::emit_changed(model, first, last);
 	}
 
 	template <class Container>
 	void view_qtbase<Container>::change_indexes(int_vector::const_iterator first, int_vector::const_iterator last, int offset)
 	{
 		auto * model = get_model();
-		auto size = last - first;
-
-		auto list = model->persistentIndexList();
-		for (const auto & idx : list)
-		{
-			if (!idx.isValid()) continue;
-
-			auto row = idx.row();
-			auto col = idx.column();
-
-			if (row < offset) continue;
-
-			assert(row < size); (void)size;
-			auto newIdx = model->index(first[row - offset], col);
-			model->changePersistentIndex(idx, newIdx);
-		}
+		viewed::change_indexes(model, first, last, offset);
 	}
 
 	template <class Container>

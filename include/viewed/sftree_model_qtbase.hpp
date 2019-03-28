@@ -46,10 +46,10 @@ namespace viewed
 		auto upsert(Iterator first, Iterator last) -> std::enable_if_t<ext::is_iterator_v<Iterator>>;
 
 		template <class Range>
-		auto assign(Range && range) -> std::enable_if_t<ext::is_range_v<ext::remove_cvref_t<Range>>>;
+		auto assign(Range && range) -> std::enable_if_t<ext::is_range_v<Range>>;
 
 		template <class Range>
-		auto upsert(Range && range) -> std::enable_if_t<ext::is_range_v<ext::remove_cvref_t<Range>>>;
+		auto upsert(Range && range) -> std::enable_if_t<ext::is_range_v<Range>>;
 		
 		void clear();
 
@@ -80,7 +80,7 @@ namespace viewed
 
 	template <class ... Types>
 	template <class Range>
-	inline std::enable_if_t<ext::is_range_v<ext::remove_cvref_t<Range>>>
+	inline std::enable_if_t<ext::is_range_v<Range>>
 	sftree_model_qtbase<Types...>::assign(Range && range)
 	{
 		return assign(boost::begin(range), boost::end(range));
@@ -88,7 +88,7 @@ namespace viewed
 
 	template <class ... Types>
 	template <class Range>
-	inline std::enable_if_t<ext::is_range_v<ext::remove_cvref_t<Range>>>
+	inline std::enable_if_t<ext::is_range_v<Range>>
 	sftree_model_qtbase<Types...>::upsert(Range && range)
 	{
 		return upsert(boost::begin(range), boost::end(range));

@@ -85,10 +85,10 @@ namespace viewed
 	*/
 
 	template <class Type, class = void>
-	struct is_traits_type_lookalike : std::false_type {};
+	struct is_associative_container_traits_type_lookalike : std::false_type {};
 
 	template <class Type>
-	struct is_traits_type_lookalike<Type, std::void_t<
+	struct is_associative_container_traits_type_lookalike<Type, std::void_t<
 		typename Type::value_type,
 		typename Type::main_store_type,
 		decltype(Type::value_pointer(std::declval<typename Type::main_store_type::value_type>()))
@@ -96,7 +96,7 @@ namespace viewed
 
 	/// you can specialize this trait to explicitly define if concrete type is a trait
 	template <class Type>
-	struct is_traits_type : is_traits_type_lookalike<Type> {};
+	struct is_associative_container_traits_type : is_associative_container_traits_type_lookalike<Type> {};
 
 
 	/// Base associative container class built on top of some defined by traits associative container.
@@ -121,7 +121,7 @@ namespace viewed
 	>
 	class associative_container_base : protected Traits
 	{
-		static_assert(is_traits_type<Traits>::value);
+		static_assert(is_associative_container_traits_type<Traits>::value);
 		using self_type = associative_container_base<Traits, SignalTraits>;
 	
 	protected:
@@ -234,11 +234,9 @@ namespace viewed
 		auto upsert(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
 		{ return upsert_newrecs(first, last); }
 
-		template <class SinglePathRange>
-		auto upsert(SinglePathRange && range) -> std::enable_if_t<ext::is_range_v<SinglePathRange>>
+		template <class SinglePassRange>
+		auto upsert(SinglePassRange && range) -> std::enable_if_t<ext::is_range_v<SinglePassRange>>
 		{ return upsert(boost::begin(range), boost::end(range)); }
-
-		void upsert(std::initializer_list<value_type> ilist) { upsert(std::begin(ilist), std::end(ilist)); }
 
 		/// clear container and assigns elements from [first, last)
 		template <class SinglePassIterator>
@@ -248,8 +246,6 @@ namespace viewed
 		template <class SinglePassRange>
 		auto assign(SinglePassRange && range) -> std::enable_if_t<ext::is_range_v<SinglePassRange>>
 		{ return assign(boost::begin(range), boost::end(range)); }
-
-		void assign(std::initializer_list<value_type> ilist) { assign(std::begin(ilist), std::end(ilist)); }
 
 	protected:
 		associative_container_base(traits_type traits = {})

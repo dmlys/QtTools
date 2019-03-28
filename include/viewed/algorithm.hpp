@@ -9,9 +9,12 @@
 #include <ext/type_traits.hpp>
 
 #include <varalgo/std_variant_traits.hpp>
+#include <viewed/qt_model.hpp>
 
 namespace viewed
 {
+	class AbstractItemModel;
+
 	namespace detail
 	{
 		template <class Pred> static std::enable_if_t<    ext::static_castable_v<Pred, bool>, bool> active_visitor(const Pred & pred) { return static_cast<bool>(pred); }
@@ -197,5 +200,56 @@ namespace viewed
 		}
 
 		return std::move(it, last, out);
+	}
+
+
+	/// emits qt signal model->dataChanged about changed rows. Changed rows are defined by indexes stored in [first; last)
+	template <class SinglePassIterator>
+	void emit_changed(AbstractItemModel * model, SinglePassIterator first, SinglePassIterator last)
+	{
+		if (first == last) return;
+
+		int ncols = model->columnCount(AbstractItemModel::invalid_index);
+
+		for (; first != last; ++first)
+		{
+			// lower index on top, higher on bottom
+			int top, bottom;
+			top = bottom = *first;
+
+			// try to find the sequences with step of 1, for example: ..., 4, 5, 6, ...
+			for (++first; first != last and *first - bottom == 1; ++first, ++bottom)
+				continue;
+
+			--first;
+
+			auto top_left = model->index(top, 0, AbstractItemModel::invalid_index);
+			auto bottom_right = model->index(bottom, ncols - 1, AbstractItemModel::invalid_index);
+			Q_EMIT model->dataChanged(top_left, bottom_right, AbstractItemModel::all_roles);
+		}
+	}
+
+	/// changes persistent indexes via get_model->changePersistentIndex.
+	/// [first; last) - range where range[oldIdx - offset] => newIdx.
+	/// if newIdx < 0 - index should be removed(changed on invalid, qt supports it)
+	template <class SinglePassIterator>
+	void change_indexes(AbstractItemModel * model, SinglePassIterator first, SinglePassIterator last, int offset)
+	{
+		auto size = last - first;
+
+		auto list = model->persistentIndexList();
+		for (const auto & idx : list)
+		{
+			if (!idx.isValid()) continue;
+
+			auto row = idx.row();
+			auto col = idx.column();
+
+			if (row < offset) continue;
+
+			assert(row < size); (void)size;
+			auto newIdx = model->index(first[row - offset], col);
+			model->changePersistentIndex(idx, newIdx);
+		}
 	}
 }

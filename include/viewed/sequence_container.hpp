@@ -5,6 +5,7 @@
 
 #include <viewed/signal_traits.hpp>
 #include <ext/try_reserve.hpp>
+#include <ext/range/range_traits.hpp>
 
 namespace viewed
 {
@@ -242,15 +243,15 @@ namespace viewed
 		template <class... Args> connection on_clear(Args && ... args)  { return m_clear_signal.connect(std::forward<Args>(args)...); }
 
 	protected:
-		/// finds and updates or appends elements from [first; last) into internal store m_store
-		/// those elements also placed into upserted_recs for further notifications of views
+		/// appends elements from [first; last) into internal store and notifies views
 		template <class SinglePassIterator>
 		void append_newrecs(SinglePassIterator first, SinglePassIterator last);
 
+		/// assigns elements from [first; last) into internal store and notifies views
 		template <class SinglePassIterator>
 		void assign_newrecs(SinglePassIterator first, SinglePassIterator last);
 
-		/// erases elements [first, last) from attached views
+		/// erases elements [first, last) from internal stores and notifies views
 		void erase_from_views(const_iterator first, const_iterator last);
 
 		/// notifies views about update
@@ -259,27 +260,35 @@ namespace viewed
 	public:
 		/// erases all elements
 		void clear();
-		/// erases elements [first, last) from internal store and views
+
+		/// erases elements [first, last)
 		/// [first, last) must be a valid range
 		const_iterator erase(const_iterator first, const_iterator last);
 		/// erase element pointed by it
 		const_iterator erase(const_iterator it) { return erase(it, std::next(it)); }
-		/// erase element by key
-		template <class CompatibleKey>
-		size_type erase(const CompatibleKey & key);
 
-		/// upserts new record from [first, last)
-		/// records which are already in container will be replaced with new ones
+		/// appends new record from [first, last)
 		template <class SinglePassIterator>
-		void append(SinglePassIterator first, SinglePassIterator last);
-		void append(std::initializer_list<value_type> ilist) { append(std::begin(ilist), std::end(ilist)); }
+		auto append(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
 
 		/// clear container and assigns elements from [first, last)
 		template <class SinglePassIterator>
-		void assign(SinglePassIterator first, SinglePassIterator last);
-		void assign(std::initializer_list<value_type> ilist) { assign(std::begin(ilist), std::end(ilist)); }
+		auto assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
 
-		template <class Arg> void append(Arg && arg) { append(&arg, &arg + 1); }
+
+		template <class Range>
+		auto assign(Range && range) -> std::enable_if_t<ext::is_range_v<Range>>
+		{ using std::begin; using std::end; assign(begin(range), end(range)); }
+
+		template <class SinglePassRange>
+		auto append(SinglePassRange && range) -> std::enable_if_t<std::is_convertible_v<ext::range_value_t<SinglePassRange>, value_type>>
+		{ return append(boost::begin(range), boost::end(range)); }
+
+		template <class SinglePassRange>
+		auto assign(SinglePassRange && range) -> std::enable_if_t<std::is_convertible_v<ext::range_value_t<SinglePassRange>, value_type>>
+		{ return assign(boost::begin(range), boost::end(range)); }
+
+		template <class Arg> auto append(Arg && arg) -> std::enable_if_t<std::is_convertible_v<Arg, value_type>> { append(&arg, &arg + 1); }
 		template <class Arg> void push_back(Arg && arg) { return append(std::forward<Arg>(arg)); }
 
 	public:
@@ -373,26 +382,15 @@ namespace viewed
 	}
 
 	template <class Type, class Traits, class SignalTraits>
-	template <class CompatibleKey>
-	auto sequence_container<Type, Traits, SignalTraits>::erase(const CompatibleKey & key) -> size_type
-	{
-		const_iterator first, last;
-		std::tie(first, last) = m_store.equal_range(key);
-		auto count = std::distance(first, last);
-		erase(first, last);
-		return count;
-	}
-
-	template <class Type, class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	inline void sequence_container<Type, Traits, SignalTraits>::append(SinglePassIterator first, SinglePassIterator last)
+	inline auto sequence_container<Type, Traits, SignalTraits>::append(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
 	{
 		return append_newrecs(first, last);
 	}
 
 	template <class Type, class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	inline void sequence_container<Type, Traits, SignalTraits>::assign(SinglePassIterator first, SinglePassIterator last)
+	inline auto sequence_container<Type, Traits, SignalTraits>::assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
 	{
 		return assign_newrecs(first, last);
 	}

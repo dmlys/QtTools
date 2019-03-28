@@ -1,4 +1,5 @@
 #pragma once
+#include <utility>
 #include <variant>
 
 namespace varalgo
@@ -9,7 +10,27 @@ namespace varalgo
 		template <class Visitor, class ... Variants>
 		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
 		{
-			return vis(std::forward<Variants>(vars)...);
+			return std::forward<Visitor>(vis)(std::forward<Variants>(vars)...);
+		}
+	};
+
+	template <class Pred>
+	struct variant_traits<std::reference_wrapper<Pred>>
+	{
+		template <class Visitor, class ... Variants>
+		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
+		{
+			return variant_traits<Pred>::visit(std::forward<Visitor>(vis), vars.get()...);
+		}
+	};
+
+	template <class Pred>
+	struct variant_traits<std::reference_wrapper<const Pred>>
+	{
+		template <class Visitor, class ... Variants>
+		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
+		{
+			return variant_traits<Pred>::visit(std::forward<Visitor>(vis), vars.get()...);
 		}
 	};
 

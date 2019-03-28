@@ -83,12 +83,12 @@ namespace viewed
 	public:
 		/// transform given L1<T...> to ordered_container_traits<T...>
 		using eval_ordered_container_traits = boost::mp11::mp_bind_front<boost::mp11::mp_apply_q, boost::mp11::mp_quote<ordered_container_traits>>;
-		using traits = boost::mp11::mp_eval_if_q<is_traits_type<first_type>, first_type, eval_ordered_container_traits, typelist>;
+		using traits = boost::mp11::mp_eval_if_q<is_associative_container_traits_type<first_type>, first_type, eval_ordered_container_traits, typelist>;
 		using signal_traits = boost::mp11::mp_eval_if<is_signal_traits<last_type>, last_type, default_signal_traits, typename traits::value_type>;
 
 	private:
 		static constexpr bool all_used = boost::mp11::mp_empty<
-			boost::mp11::mp_if<is_traits_type<first_type>, boost::mp11::mp_rest<typelist>, boost::mp11::mp_list<>>
+			boost::mp11::mp_if<is_associative_container_traits_type<first_type>, boost::mp11::mp_rest<typelist>, boost::mp11::mp_list<>>
 		>::value;
 
 		static_assert(all_used, "type arguments contain unused parameters, is first one is a traits type?");
@@ -108,7 +108,7 @@ namespace viewed
 	///
 	/// @Types - is list of types in form: traits types..., signal_traits
 	///   signal_traits - are always optional, but if given - should be last argument(detected via is_signal_traits)
-	///   types... are either: one explicit traits type(detected via is_traits_type)
+	///   types... are either: one explicit traits type(detected via is_associative_container_traits_type)
 	///                    or: arguments to ordered_container_traits
 	///
 	/// examples:

@@ -1049,6 +1049,8 @@ namespace viewed
 	template <class Traits, class ModelBase>
 	void sftree_facade_qtbase<Traits, ModelBase>::refilter_incremental_and_notify()
 	{
+		if (not active(m_filter_pred)) return;
+
 		refilter_context ctx;
 		int_vector index_array, inverse_buffer_array;
 		ivalue_ptr_vector valptr_array;
@@ -1146,6 +1148,9 @@ namespace viewed
 	{
 		for_each_child_page(page, [this, &ctx](auto & page) { refilter_full_and_notify(page, ctx); });
 
+		// filter not active and all children visible - not action required
+		if (not active(m_filter_pred) and page.nvisible == page.children.size()) return;
+
 		auto & container = page.children;
 		auto & seq_view = container.template get<by_seq>();
 		auto seq_ptr_view = seq_view | ext::outdirected;
@@ -1193,7 +1198,7 @@ namespace viewed
 
 		if (not viewed::active(m_filter_pred))
 		{
-			// if there is now filter - just merge shadow area with visible
+			// if there is no filter - just merge shadow area with visible
 			nvisible_new = slast - vfirst;
 			merge_newdata(vfirst, vlast, slast, ivfirst, ivlast, islast, false);
 		}
