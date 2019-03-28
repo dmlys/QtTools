@@ -9,7 +9,6 @@
 #include <ext/try_reserve.hpp>
 #include <ext/iterator/zip_iterator.hpp>
 #include <ext/iterator/outdirect_iterator.hpp>
-#include <ext/iterator/indirect_iterator.hpp>
 #include <ext/range/range_traits.hpp>
 #include <ext/range/adaptors/moved.hpp>
 #include <ext/range/adaptors/outdirected.hpp>
@@ -26,7 +25,12 @@
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/random_access_index.hpp>
+#include <boost/multi_index/identity.hpp>
 #include <boost/iterator/transform_iterator.hpp>
+
+#include <boost/mp11/list.hpp>
+#include <boost/mp11/bind.hpp>
+#include <boost/mp11/algorithm.hpp>
 
 #include <QtCore/QAbstractItemModel>
 #include <QtTools/ToolsBase.hpp>
@@ -41,6 +45,39 @@
 
 namespace viewed
 {
+	/// default sfset_model_qtbase traits
+	template <class Type, class KeyExtractor, class Sorter, class Filter>
+	struct sfset_model_traits
+	{
+		using value_type = Type;
+		using key_type = std::decay_t<std::invoke_result_t<KeyExtractor, const value_type &>>;
+
+		using key_extractor_type = KeyExtractor;
+		using key_hash_type      = std::hash<key_type>;
+		using key_equal_to_type  = std::equal_to<>;
+		using key_less_type      = std::less<>;
+
+		using sort_pred_type   = Sorter;
+		using filter_pred_type = Filter;
+
+		static void update(value_type & curval, value_type && newval)      { curval = std::move(newval); }
+		static void update(value_type & curval, const value_type & newval) { curval = newval; }
+	};
+
+	/// deduces and defines traits type for sfset_model_qtbase
+	template <class ... Types>
+	struct sfset_model_types
+	{
+		static_assert(sizeof...(Types) == 1 or sizeof...(Types) == 3 or sizeof...(Types) == 4, "sfset_model_qtbase: incorrect number of types");
+
+		using typelist = boost::mp11::mp_list<Types...>;
+		using default_key_extractor = boost::mp11::mp_eval_if_c<sizeof...(Types) != 3, void, boost::multi_index::identity, boost::mp11::mp_first<typelist>>;
+		using traits_type_list = boost::mp11::mp_if_c<sizeof...(Types) == 3, boost::mp11::mp_insert_c<typelist, 1, default_key_extractor>, typelist>;
+
+		using eval_sfset_model_traits = boost::mp11::mp_bind_front<boost::mp11::mp_apply_q, boost::mp11::mp_quote<sfset_model_traits>>;
+		using traits = boost::mp11::mp_eval_if_q<boost::mp11::mp_bool<sizeof...(Types) == 1>, boost::mp11::mp_first<typelist>, eval_sfset_model_traits, traits_type_list>;
+	};
+
 	/// This class provides base for building qt standalone qt models(holds data internally, not a view to some other container/model).
 	/// Data is assumed to be unique identified by some key: only one record with given key is present in model at any time.
 	///
@@ -49,15 +86,19 @@ namespace viewed
 	/// * sorting/filtering;
 	/// * QAbstractItemModel stuff: index calculation, persistent index management on updates and sorting/filtering;
 	///
+	/// @Param Types list of types, specifies a traits type or arguments for sfset_model_traits
+	/// examples:
+	///   sfset_model_qtbase<traits>                               - most generic form, where traits given directly(traits requirements are described below)
+	///   sfset_model_qtbase<type, sorter, filter>                 - same as sfset_model_qtbase<type, boost::multi_index::identity<type>, sorter, filter>
+	///   sfset_model_qtbase<type, key_extractor, sorter, filter>  - same as sfset_model_qtbase<sfset_model_traits<type, key_extractor, sorter, filter>>
+	///
 	/// Traits - type container describing type and some related types:
 	///   value_type          - type this model manages
 	///   key_type            - key type
+	///   key_extractor_type  - key extractor functor: usually something like: ... { return val.key; }
 	///   key_equal_to_type   - predicate used to compare key for equality, typically std::equal_to<>
 	///   key_less_type       - predicate used to compare key for less, typically std::less<>
 	///   key_hash_type       - functor used to calculate hash from key, typically std::hash<key_type>
-	///
-	///   static auto get_key(const value_type & val) - key_type/const key_type &
-	///        returns/extracts key value, usually something like: return val.name
 	///
 	///   static void update(value_type & curval, value_type && newval)
 	///   static void update(value_type & curval, const value_type & newval)
@@ -68,13 +109,13 @@ namespace viewed
 	///     predicates for sorting/filtering items based on some criteria, this is usually sorting by columns and filtering by some text
 	///     should be default constructable
 	///
-	template <class Traits>
+	template <class ... Types>
 	class sfset_model_qtbase
 	{
 		using self_type = sfset_model_qtbase;
 
 	public:
-		using traits_type = Traits;
+		using traits_type = typename sfset_model_types<Types...>::traits;
 
 	public:
 		using value_type      = typename traits_type::value_type;
@@ -85,10 +126,11 @@ namespace viewed
 		using pointer   = const_pointer;
 
 	public:
-		using key_type          = typename traits_type::key_type;
-		using key_equal_to_type = typename traits_type::key_equal_to_type;
-		using key_less_type     = typename traits_type::key_less_type;
-		using key_hash_type     = typename traits_type::key_hash_type;
+		using key_type           = typename traits_type::key_type;
+		using key_equal_to_type  = typename traits_type::key_equal_to_type;
+		using key_less_type      = typename traits_type::key_less_type;
+		using key_hash_type      = typename traits_type::key_hash_type;
+		using key_extractor_type = typename traits_type::key_extractor_type;
 
 		using sort_pred_type   = typename traits_type::sort_pred_type;
 		using filter_pred_type = typename traits_type::filter_pred_type;
@@ -101,17 +143,10 @@ namespace viewed
 		using int_vector = std::vector<int>;
 		using int_vector_iterator = int_vector::iterator;
 
-	public:
-		struct get_key_type
-		{
-			using result_type = std::invoke_result_t<decltype(traits_type::get_key), const value_type &>;
-			template <class Arg> decltype(auto) operator()(Arg && arg) const { return traits_type::get_key(std::forward<Arg>(arg)); }
-		};
-
 	protected:
 		// boost::multi_index_container is used to index elements by key and by position
 		//
-		// Because we hold data - we manage their life-time
+		// Because we hold data - we manage their life-time,
 		// and when some values are filtered out we can't just delete them - they will be lost completely.
 		// Instead we define visible part and shadow part.
 		// Container is partitioned is such way that first comes visible elements, after them shadowed - those who does not pass filter criteria.
@@ -121,7 +156,7 @@ namespace viewed
 			value_type,
 			boost::multi_index::indexed_by<
 				boost::multi_index::random_access<>,
-				boost::multi_index::hashed_unique<get_key_type, key_hash_type, key_equal_to_type>
+				boost::multi_index::hashed_unique<key_extractor_type, key_hash_type, key_equal_to_type>
 			>
 		>;
 
@@ -168,16 +203,15 @@ namespace viewed
 		using size_type       = typename seq_view_type::size_type;
 		using difference_type = typename seq_view_type::difference_type;
 
-	public:
-		static constexpr get_key_type get_key {};
+	protected:
 		static constexpr auto make_ref = [](auto * ptr) { return std::ref(*ptr); };
 
 	protected:
 		value_container m_store;
 		size_type m_nvisible = 0;
 
-		filter_pred_type m_filter_pred;
 		sort_pred_type m_sort_pred;
+		filter_pred_type m_filter_pred;
 
 	protected:
 		/// acquires pointer to qt model, normally you would inherit both QAbstractItemModel and this class.
@@ -270,7 +304,8 @@ namespace viewed
 	public:
 		/// erases all elements
 		void clear();
-		/// erases elements [first, last) from internal store and views
+
+		/// erases elements [first, last)
 		/// [first, last) must be a valid range
 		const_iterator erase(const_iterator first, const_iterator last);
 		/// erase element pointed by it
@@ -289,91 +324,53 @@ namespace viewed
 		{ using std::begin; using std::end; return erase(begin(range), end(range)); }
 
 
-		/// clear container and assigns elements from [first, last)
+		/// clears container and assigns elements from [first, last)
 		template <class SinglePassIterator>
-		void assign(SinglePassIterator first, SinglePassIterator last);
+		auto assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
 
-		/// upserts new record from [first, last)
+		/// upserts new records from [first, last)
 		/// records which are already in container will be replaced with new ones
 		template <class SinglePassIterator>
-		void upsert(SinglePassIterator first, SinglePassIterator last);
-
+		auto upsert(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
 
 		template <class Range>
-		auto upsert(Range && range) -> std::enable_if_t<ext::is_range_v<ext::remove_cvref_t<Range>>>
+		auto upsert(Range && range) -> std::enable_if_t<ext::is_range_v<Range>>
 		{ using std::begin; using std::end; upsert(begin(range), end(range)); }
 
 		template <class Range>
-		auto assign(Range && range) -> std::enable_if_t<ext::is_range_v<ext::remove_cvref_t<Range>>>
+		auto assign(Range && range) -> std::enable_if_t<ext::is_range_v<Range>>
 		{ using std::begin; using std::end; assign(begin(range), end(range)); }
-
-		template <class Arg> void append(Arg && arg) { append(&arg, &arg + 1); }
-		template <class Arg> void push_back(Arg && arg) { return append(std::forward<Arg>(arg)); }
 
 	public:
 		virtual ~sfset_model_qtbase() = default;
 	};
 
 
-	template <class Traits>
-	auto sfset_model_qtbase<Traits>::get_model() -> model_type *
+	template <class ... Types>
+	auto sfset_model_qtbase<Types...>::get_model() -> model_type *
 	{
 		auto * model = dynamic_cast<QAbstractItemModel *>(this);
 		assert(model);
 		return static_cast<model_type *>(model);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::emit_changed(int_vector::const_iterator first, int_vector::const_iterator last)
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::emit_changed(int_vector::const_iterator first, int_vector::const_iterator last)
 	{
-		if (first == last) return;
-
 		auto * model = get_model();
-		int ncols = model->columnCount(model_type::invalid_index);
-
-		for (; first != last; ++first)
-		{
-			// lower index on top, higher on bottom
-			int top, bottom;
-			top = bottom = *first;
-
-			// try to find the sequences with step of 1, for example: ..., 4, 5, 6, ...
-			for (++first; first != last and *first - bottom == 1; ++first, ++bottom)
-				continue;
-
-			--first;
-
-			auto top_left = model->index(top, 0, model_type::invalid_index);
-			auto bottom_right = model->index(bottom, ncols - 1, model_type::invalid_index);
-			Q_EMIT model->dataChanged(top_left, bottom_right, model_type::all_roles);
-		}
+		viewed::emit_changed(model, first, last);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::change_indexes(int_vector::const_iterator first, int_vector::const_iterator last, int offset)
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::change_indexes(int_vector::const_iterator first, int_vector::const_iterator last, int offset)
 	{
 		auto * model = get_model();
-		auto size = last - first;
-
-		auto list = model->persistentIndexList();
-		for (const auto & idx : list)
-		{
-			if (!idx.isValid()) continue;
-
-			auto row = idx.row();
-			auto col = idx.column();
-
-			if (row < offset) continue;
-
-			assert(row < size); (void)size;
-			auto newIdx = model->index(first[row - offset], col);
-			model->changePersistentIndex(idx, newIdx);
-		}
+		viewed::change_indexes(model, first, last, offset);
 	}
 
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::merge_newdata(
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::merge_newdata(
 			value_ptr_iterator first, value_ptr_iterator middle, value_ptr_iterator last, bool resort_old /*= true*/)
 	{
 		if (not active(m_sort_pred)) return;
@@ -385,8 +382,8 @@ namespace viewed
 		varalgo::inplace_merge(first, middle, last, comp);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::merge_newdata(
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::merge_newdata(
 			value_ptr_iterator first, value_ptr_iterator middle, value_ptr_iterator last,
 			int_vector_iterator ifirst, int_vector_iterator imiddle, int_vector_iterator ilast,
 			bool resort_old /* = true */)
@@ -407,8 +404,8 @@ namespace viewed
 		varalgo::inplace_merge(zfirst, zmiddle, zlast, comp);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::stable_sort(value_ptr_iterator first, value_ptr_iterator last)
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::stable_sort(value_ptr_iterator first, value_ptr_iterator last)
 	{
 		if (not active(m_sort_pred)) return;
 
@@ -416,8 +413,8 @@ namespace viewed
 		varalgo::stable_sort(first, last, comp);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::stable_sort(
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::stable_sort(
 			value_ptr_iterator first, value_ptr_iterator last,
 			int_vector_iterator ifirst, int_vector_iterator ilast)
 	{
@@ -430,8 +427,8 @@ namespace viewed
 		varalgo::stable_sort(zfirst, zlast, comp);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::sort_and_notify()
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::sort_and_notify()
 	{
 		if (not active(m_sort_pred)) return;
 
@@ -469,8 +466,8 @@ namespace viewed
 		Q_EMIT model->layoutChanged(model_type::empty_model_list, model->VerticalSortHint);
 	}
 
-	template <class Traits>
-	auto sfset_model_qtbase<Traits>::search_hint(const_pointer ptr) const -> search_hint_type
+	template <class ... Types>
+	auto sfset_model_qtbase<Types...>::search_hint(const_pointer ptr) const -> search_hint_type
 	{
 		if (not active(m_sort_pred)) return {m_store.begin(), m_store.end()};
 
@@ -480,8 +477,8 @@ namespace viewed
 		return varalgo::equal_range(first, last, *ptr, m_sort_pred);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::refilter_and_notify(refilter_type rtype)
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::refilter_and_notify(refilter_type rtype)
 	{
 		switch (rtype)
 		{
@@ -493,8 +490,8 @@ namespace viewed
 		}
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::refilter_incremental_and_notify()
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::refilter_incremental_and_notify()
 	{
 		if (not active(m_filter_pred)) return;
 
@@ -509,7 +506,7 @@ namespace viewed
 
 		// implementation is similar to refilter_full_and_notify,
 		// but more simple - only visible area should filtered, and no sorting should be done
-		// refilter_full_and_notify - for more description
+		// see refilter_full_and_notify - for more description
 
 		value_ptr_vector valptr_vector;
 		int_vector index_array;
@@ -547,8 +544,8 @@ namespace viewed
 		model->layoutChanged(model_type::empty_model_list, model_type::NoLayoutChangeHint);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::refilter_full_and_notify()
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::refilter_full_and_notify()
 	{
 		if (not active(m_filter_pred) and m_nvisible == m_store.size()) return;
 
@@ -559,7 +556,7 @@ namespace viewed
 		auto & seq_view = container.template get<by_seq>();
 		auto seq_ptr_view = seq_view | ext::outdirected;
 		constexpr int offset = 0;
-		int nvisible_new, nvisible = m_nvisible;
+		int nvisible_new;
 
 		value_ptr_vector valptr_vector;
 		int_vector index_array;
@@ -588,20 +585,20 @@ namespace viewed
 		auto zfpred = viewed::make_get_functor<0>(fpred);
 
 		auto vfirst = valptr_vector.begin();
-		auto vlast  = vfirst + nvisible;
+		auto vlast  = vfirst + m_nvisible;
 		auto sfirst = vlast;
 		auto slast  = valptr_vector.end();
 
 		// elements index array - it will be permutated with elements array, later it will be used for recalculating qt indexes
 		auto ivfirst = index_array.begin();
-		auto ivlast  = ivfirst + nvisible;
+		auto ivlast  = ivfirst + m_nvisible;
 		auto isfirst = ivlast;
 		auto islast  = index_array.end();
 		std::iota(ivfirst, islast, offset);
 
 		if (not viewed::active(m_filter_pred))
 		{
-			// if there is now filter - just merge shadow area with visible
+			// if there is no filter - just merge shadow area with visible
 			nvisible_new = slast - vfirst;
 			merge_newdata(vfirst, vlast, slast, ivfirst, ivlast, islast, false);
 		}
@@ -651,9 +648,9 @@ namespace viewed
 		model->layoutChanged(model_type::empty_model_list, model_type::NoLayoutChangeHint);
 	}
 
-	template <class Traits>
+	template <class ... Types>
 	template <class ... Args>
-	auto sfset_model_qtbase<Traits>::filter_by(Args && ... args) -> refilter_type
+	auto sfset_model_qtbase<Types...>::filter_by(Args && ... args) -> refilter_type
 	{
 		auto rtype = m_filter_pred.set_expr(std::forward<Args>(args)...);
 		refilter_and_notify(rtype);
@@ -661,9 +658,9 @@ namespace viewed
 		return rtype;
 	}
 
-	template <class Traits>
+	template <class ... Types>
 	template <class ... Args>
-	void sfset_model_qtbase<Traits>::sort_by(Args && ... args)
+	void sfset_model_qtbase<Types...>::sort_by(Args && ... args)
 	{
 		m_sort_pred = sort_pred_type(std::forward<Args>(args)...);
 		sort_and_notify();
@@ -671,8 +668,8 @@ namespace viewed
 
 
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::rearrange_and_notify(upsert_context & ctx)
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::rearrange_and_notify(upsert_context & ctx)
 	{
 		auto * model = get_model();
 		Q_EMIT model->layoutAboutToBeChanged(model_type::empty_model_list, model_type::NoLayoutChangeHint);
@@ -692,10 +689,10 @@ namespace viewed
 		auto fpred  = viewed::make_indirect_functor(std::cref(m_filter_pred));
 
 		// We must rearrange children according to sorting/filtering criteria.
-		// * some elements have been erased - those must be erased
-		// * some elements have been inserted - those should placed in visible or shadow area if they do not pass filtering
-		// * some elements have changed - those can move from/to visible/shadow area
-		// * when working with visible area - order of visible elements should not changed - we want stability
+		//  * some elements have been erased - those must be erased
+		//  * some elements have been inserted - those should placed in visible or shadow area if they do not pass filtering
+		//  * some elements have changed - those can move from/to visible/shadow area
+		//  * when working with visible area - order of visible elements should not changed - we want stability
 		// And then visible elements should be resorted according to sorting criteria.
 		// And Qt persistent indexes should be recalculated.
 		// Removal of elements from boost::multi_index_container is O(n) operation, where n is distance from position to end of sequence,
@@ -878,7 +875,6 @@ namespace viewed
 		merge_newdata(vfirst, vlast, nlast, ifirst, imiddle, ifirst + (nlast - vfirst), resort_old);
 
 		// at last, rearranging is over -> set order it boost::multi_index_container
-		constexpr auto make_ref = [](auto * ptr) { return std::ref(*ptr); };
 		seq_view.rearrange(boost::make_transform_iterator(vfirst, make_ref));
 
 		// and erase removed elements
@@ -893,9 +889,9 @@ namespace viewed
 	}
 
 
-	template <class Traits>
+	template <class ... Types>
 	template <class SinglePassIterator>
-	void sfset_model_qtbase<Traits>::assign(SinglePassIterator first, SinglePassIterator last)
+	auto sfset_model_qtbase<Types...>::assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
 	{
 		auto & container = m_store;
 		auto & code_view = container.template get<by_code>();
@@ -953,9 +949,9 @@ namespace viewed
 		rearrange_and_notify(ctx);
 	}
 
-	template <class Traits>
+	template <class ... Types>
 	template <class SinglePassIterator>
-	void sfset_model_qtbase<Traits>::upsert(SinglePassIterator first, SinglePassIterator last)
+	auto sfset_model_qtbase<Types...>::upsert(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
 	{
 		auto & container = m_store;
 		auto & code_view = container.template get<by_code>();
@@ -1000,8 +996,8 @@ namespace viewed
 		rearrange_and_notify(ctx);
 	}
 
-	template <class Traits>
-	void sfset_model_qtbase<Traits>::clear()
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::clear()
 	{
 		auto * model = get_model();
 		model->beginResetModel();
@@ -1010,8 +1006,8 @@ namespace viewed
 		model->endResetModel();
 	}
 
-	template <class Traits>
-	auto sfset_model_qtbase<Traits>::erase(const_iterator first, const_iterator last) -> const_iterator
+	template <class ... Types>
+	auto sfset_model_qtbase<Types...>::erase(const_iterator first, const_iterator last) -> const_iterator
 	{
 		if (first == last) return first;
 
@@ -1033,9 +1029,9 @@ namespace viewed
 		return ret;
 	}
 
-	template <class Traits>
+	template <class ... Types>
 	template <class CompatibleKey>
-	auto sfset_model_qtbase<Traits>::erase(const CompatibleKey & key) -> size_type
+	auto sfset_model_qtbase<Types...>::erase(const CompatibleKey & key) -> size_type
 	{		
 		auto & container = m_store;
 		auto & code_view = container.template get<by_code>();
@@ -1056,9 +1052,9 @@ namespace viewed
 		return 1;
 	}
 
-	template <class Traits>
+	template <class ... Types>
 	template <class SinglePassIterator>
-	auto sfset_model_qtbase<Traits>::erase(SinglePassIterator first, SinglePassIterator last) ->
+	auto sfset_model_qtbase<Types...>::erase(SinglePassIterator first, SinglePassIterator last) ->
 		std::enable_if_t<std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>, size_type>
 	{
 		if (first == last) return 0;
@@ -1103,7 +1099,7 @@ namespace viewed
 		return removed;
 	}
 
-}
+} // namespace viewed
 
 
 #if BOOST_COMP_GNUC

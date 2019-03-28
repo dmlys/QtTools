@@ -11,38 +11,19 @@
 namespace
 {
 	template <class Type, class Sorter, class Filter>
-	struct test_tableset_traits
-	{
-		using value_type = Type;
-		using key_type   = Type;
-
-		using key_equal_to_type = std::equal_to<>;
-		using key_less_type     = std::less<>;
-		using key_hash_type     = std::hash<key_type>;
-
-		static decltype(auto) get_key(const value_type & val) noexcept { return val; }
-
-		static void update(value_type & curval, value_type && newval) noexcept { curval = std::move(newval); }
-		static void update(value_type & curval, const value_type & newval) noexcept { curval = newval; }
-
-		using sort_pred_type = Sorter;
-		using filter_pred_type = Filter;
-	};
-
-	template <class Type, class Sorter, class Filter>
 	class sfset_model :
 		public QAbstractListModel,
-		public viewed::sfset_model_qtbase<test_tableset_traits<Type, Sorter, Filter>>
+		public viewed::sfset_model_qtbase<Type, Sorter, Filter>
 	{
 		using self_type = sfset_model;
-		using base_type = viewed::sfset_model_qtbase<test_tableset_traits<Type, Sorter, Filter>>;
+		using view_type = viewed::sfset_model_qtbase<Type, Sorter, Filter>;
 
 	public:
-		QVariant data(const QModelIndex & idx, int role) const override { return QVariant::fromValue(base_type::operator[](idx.row())); }
+		QVariant data(const QModelIndex & idx, int role) const override { return QVariant::fromValue(view_type::operator[](idx.row())); }
 		int rowCount(const QModelIndex & parent = QModelIndex()) const override { return static_cast<int>(this->m_nvisible); }
 
 	public:
-		using base_type::base_type;
+		using QAbstractListModel::QAbstractListModel;
 	};
 
 
@@ -100,7 +81,7 @@ BOOST_AUTO_TEST_CASE(simple_tests)
 
 	BOOST_CHECK_EQUAL(idx1.data().toInt(), 1);
 	BOOST_CHECK(idx1.isValid());
-	BOOST_CHECK_EQUAL(idx1.row(), 3); // moved to 0 position
+	BOOST_CHECK_EQUAL(idx1.row(), 3); // moved to 3 position
 
 	model.assign(assign_data);
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), 1);
