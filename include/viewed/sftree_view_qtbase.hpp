@@ -149,6 +149,8 @@ namespace viewed
 		this->group_by_paths(first, last);
 
 		ctx.vptr_array = &valptr_array;
+		ctx.apply_filtering = this->m_filter_root == nullptr;
+
 		ctx.first = first;
 		ctx.last  = last;
 		this->reset_page(this->m_root, ctx);

@@ -281,6 +281,8 @@ namespace viewed
 			ivalue_ptr_vector * vptr_array;                                      // helper value_ptr ptr vector, reused to minimize heap allocations
 			int_vector * index_array, *inverse_array;                            // helper index vectors, reused to minimize heap allocations
 			QModelIndexList::const_iterator model_index_first, model_index_last; // persistent indexes that should be recalculated
+
+			bool apply_filtering; // see also m_filter_root
 		};
 
 		/// context used for recursive processing of inserted, updated, erased elements
@@ -308,6 +310,8 @@ namespace viewed
 			ivalue_ptr_vector * vptr_array;
 			int_vector * index_array, *inverse_array;
 			QModelIndexList::const_iterator model_index_first, model_index_last;
+
+			bool apply_filtering; // see also m_filter_root
 		};
 
 		template <class RandomAccessIterator>
@@ -316,6 +320,8 @@ namespace viewed
 			RandomAccessIterator first, last;
 			pathview_type path;
 			ivalue_ptr_vector * vptr_array;
+
+			bool apply_filtering; // see also m_filter_root
 		};
 
 	protected:
@@ -359,6 +365,12 @@ namespace viewed
 		sort_pred_type   m_sort_pred;
 		filter_pred_type m_filter_pred;
 
+		// If not null filtering will start only from this page,
+		// see also setFilterRoot method, and QAbstractItemView::setRootIndex.
+		// When model has root index and filtered applied, filtering can filter out this element,
+		// to prevent this - we must not filter anything beyond this page and it's children
+		page_type * m_filter_root = nullptr;
+
 	protected:
 		static ivalue_container create_container(const self_type * self);
 		static ivalue_container create_container(ext::noinit_type);
@@ -384,6 +396,11 @@ namespace viewed
 		virtual QModelIndex find_element(const pathview_type & path) const;
 		/// find element by given path starting from given root, if no such element is found - invalid index returned
 		virtual QModelIndex find_element(const QModelIndex & root, const pathview_type & path) const;
+
+	public:
+		/// sets filtering root, see also QAbstractItemView::setIndexRoot
+		virtual void set_filter_root(const QModelIndex & index);
+		virtual void remove_filter_root();
 
 	public:
 		virtual int rowCount(const QModelIndex & parent = model_helper::invalid_index) const override;
@@ -435,23 +452,23 @@ namespace viewed
 		virtual void stable_sort(ivalue_ptr_iterator first, ivalue_ptr_iterator last,
 		                         int_vector::iterator ifirst, int_vector::iterator ilast);
 
-		/// sorts m_store with m_sort_pred, stable sort
+		/// sorts page with m_sort_pred, stable sort
 		/// emits qt layoutAboutToBeChanged(..., VerticalSortHint), layoutUpdated(..., VerticalSortHint)
-		virtual void sort_and_notify();
+		virtual void sort_and_notify(page_type & page);
 		virtual void sort_and_notify(page_type & page, resort_context & ctx);
 
-		/// refilters m_store with m_filter_pred according to rtype:
+		/// refilters page with m_filter_pred according to rtype:
 		/// * same        - does nothing and immediately returns(does not emit any qt signals)
 		/// * incremental - calls refilter_full_and_notify
 		/// * full        - calls refilter_incremental_and_notify
-		virtual void refilter_and_notify(viewed::refilter_type rtype);
-		/// removes elements not passing m_filter_pred from m_store
+		virtual void refilter_and_notify(viewed::refilter_type rtype, page_type & page);
+		/// removes elements not passing m_filter_pred from page
 		/// emits qt layoutAboutToBeChanged(..., NoLayoutChangeHint), layoutUpdated(..., NoLayoutChangeHint)
-		virtual void refilter_incremental_and_notify();
+		virtual void refilter_incremental_and_notify(page_type & page);
 		virtual void refilter_incremental_and_notify(page_type & page, refilter_context & ctx);
-		/// completely refilters m_store with values passing m_filter_pred and sorts them according to m_sort_pred
+		/// completely refilters page with values passing m_filter_pred and sorts them according to m_sort_pred
 		/// emits qt layoutAboutToBeChanged(..., NoLayoutChangeHint), layoutUpdated(..., NoLayoutChangeHint)
-		virtual void refilter_full_and_notify();
+		virtual void refilter_full_and_notify(page_type & page);
 		virtual void refilter_full_and_notify(page_type & page, refilter_context & ctx);
 
 	protected:
@@ -895,6 +912,62 @@ namespace viewed
 	}
 
 	template <class Traits, class ModelBase>
+	void sftree_facade_qtbase<Traits, ModelBase>::set_filter_root(const QModelIndex & root)
+	{
+		page_type * page = nullptr;
+		if (root.isValid() and is_ours_index(root))
+		{
+			const auto & element = get_ielement_ptr(root);
+			if (element.index() == PAGE)
+				page = static_cast<page_type *>(element.pointer());
+		}
+
+		if (page == m_filter_root)
+			return; // same
+
+		if (m_filter_root)
+		{
+			refilter_full_and_notify(*m_filter_root);
+			remove_filter_root();
+		}
+
+		if (page)
+		{
+			m_filter_root = page;
+			refilter_incremental_and_notify(*m_filter_root);
+		}
+	}
+
+	template <class Traits, class ModelBase>
+	void sftree_facade_qtbase<Traits, ModelBase>::remove_filter_root()
+	{
+		if (m_filter_root == nullptr) return;
+
+		auto * element = std::exchange(m_filter_root, nullptr);
+		while (element->parent)
+		{
+			auto * parent = element->parent;
+
+			auto & container = parent->children;
+			auto & seq_view = container.template get<by_seq>();
+
+			auto it = parent->children.find(get_name(element));
+			auto seqit = container.template project<by_seq>(it);
+			int  row = seqit - seq_view.begin();
+
+			if (element->children.size() != 0)
+				break;
+
+			auto parent_idx = create_index(row, 0, parent);
+			this->beginRemoveRows(parent_idx, row, row);
+			seq_view.erase(seqit);
+			this->endRemoveRows();
+
+			element = parent;
+		}
+	}
+
+	template <class Traits, class ModelBase>
 	void sftree_facade_qtbase<Traits, ModelBase>::change_indexes(page_type & page, QModelIndexList::const_iterator model_index_first, QModelIndexList::const_iterator model_index_last, int_vector::const_iterator first, int_vector::const_iterator last, int offset)
 	{
 		auto size = last - first; (void)size;
@@ -997,7 +1070,7 @@ namespace viewed
 	}
 
 	template <class Traits, class ModelBase>
-	void sftree_facade_qtbase<Traits, ModelBase>::sort_and_notify()
+	void sftree_facade_qtbase<Traits, ModelBase>::sort_and_notify(page_type & page)
 	{
 		if (not viewed::active(m_sort_pred)) return;
 
@@ -1015,7 +1088,7 @@ namespace viewed
 		ctx.model_index_first = indexes.begin();
 		ctx.model_index_last = indexes.end();
 
-		sort_and_notify(m_root, ctx);
+		sort_and_notify(page, ctx);
 
 		this->layoutChanged(model_helper::empty_model_list, model_helper::NoLayoutChangeHint);
 	}
@@ -1055,20 +1128,20 @@ namespace viewed
 	}
 
 	template <class Traits, class ModelBase>
-	void sftree_facade_qtbase<Traits, ModelBase>::refilter_and_notify(viewed::refilter_type rtype)
+	void sftree_facade_qtbase<Traits, ModelBase>::refilter_and_notify(viewed::refilter_type rtype, page_type & page)
 	{
 		switch (rtype)
 		{
 			default:
 			case viewed::refilter_type::same:        return;
 			
-			case viewed::refilter_type::incremental: return refilter_incremental_and_notify();
-			case viewed::refilter_type::full:        return refilter_full_and_notify();
+			case viewed::refilter_type::incremental: return refilter_incremental_and_notify(page);
+			case viewed::refilter_type::full:        return refilter_full_and_notify(page);
 		}
 	}
 
 	template <class Traits, class ModelBase>
-	void sftree_facade_qtbase<Traits, ModelBase>::refilter_incremental_and_notify()
+	void sftree_facade_qtbase<Traits, ModelBase>::refilter_incremental_and_notify(page_type & page)
 	{
 		if (not active(m_filter_pred)) return;
 
@@ -1079,14 +1152,15 @@ namespace viewed
 		ctx.index_array = &index_array;
 		ctx.inverse_array = &inverse_buffer_array;
 		ctx.vptr_array = &valptr_array;
+		ctx.apply_filtering = m_filter_root == nullptr;
 
 		this->layoutAboutToBeChanged(model_helper::empty_model_list, model_helper::NoLayoutChangeHint);
 
 		auto indexes = this->persistentIndexList();
 		ctx.model_index_first = indexes.begin();
-		ctx.model_index_last = indexes.end();
+		ctx.model_index_last = indexes.end();		
 
-		refilter_incremental_and_notify(m_root, ctx);
+		refilter_incremental_and_notify(page, ctx);
 
 		this->layoutChanged(model_helper::empty_model_list, model_helper::NoLayoutChangeHint);
 	}
@@ -1094,7 +1168,15 @@ namespace viewed
 	template <class Traits, class ModelBase>
 	void sftree_facade_qtbase<Traits, ModelBase>::refilter_incremental_and_notify(page_type & page, refilter_context & ctx)
 	{
+		// we should apply filtering only if our page is filtering root, or apply filtering was already set by our parent.
+		// set ctx.apply_filtering for children, but restore it on leave
+		auto apply_filtering = ctx.apply_filtering or &page == m_filter_root;
+		auto old_apply_filtering = std::exchange(ctx.apply_filtering, apply_filtering);
+
 		for_each_child_page(page, [this, &ctx](auto & page) { refilter_incremental_and_notify(page, ctx); });
+
+		if (not apply_filtering) return;
+		ctx.apply_filtering = old_apply_filtering;
 
 		auto & container = page.children;
 		auto & seq_view = container.template get<by_seq>();
@@ -1126,6 +1208,7 @@ namespace viewed
 
 		std::iota(ivfirst, islast, offset);
 
+		// if (ctx.apply_filtering)
 		auto[vpp, ivpp] = std::stable_partition(
 			ext::make_zip_iterator(vfirst, ivfirst),
 			ext::make_zip_iterator(vlast, ivlast),
@@ -1143,7 +1226,7 @@ namespace viewed
 	}
 
 	template <class Traits, class ModelBase>
-	void sftree_facade_qtbase<Traits, ModelBase>::refilter_full_and_notify()
+	void sftree_facade_qtbase<Traits, ModelBase>::refilter_full_and_notify(page_type & page)
 	{
 		refilter_context ctx;
 		int_vector index_array, inverse_buffer_array;
@@ -1152,6 +1235,7 @@ namespace viewed
 		ctx.index_array = &index_array;
 		ctx.inverse_array = &inverse_buffer_array;
 		ctx.vptr_array = &valptr_array;
+		ctx.apply_filtering = m_filter_root == nullptr;
 
 		this->layoutAboutToBeChanged(model_helper::empty_model_list, model_helper::NoLayoutChangeHint);
 
@@ -1159,7 +1243,7 @@ namespace viewed
 		ctx.model_index_first = indexes.begin();
 		ctx.model_index_last = indexes.end();
 
-		refilter_full_and_notify(m_root, ctx);
+		refilter_full_and_notify(page, ctx);
 
 		this->layoutChanged(model_helper::empty_model_list, model_helper::NoLayoutChangeHint);
 	}
@@ -1167,7 +1251,13 @@ namespace viewed
 	template <class Traits, class ModelBase>
 	void sftree_facade_qtbase<Traits, ModelBase>::refilter_full_and_notify(page_type & page, refilter_context & ctx)
 	{
+		// we should apply filtering only if our page is filtering root, or apply filtering was already set by our parent.
+		auto apply_filtering = ctx.apply_filtering or &page == m_filter_root;
+
+		// set ctx.apply_filtering for children, but restore it on leave
+		auto old_apply_filtering = std::exchange(ctx.apply_filtering, apply_filtering);
 		for_each_child_page(page, [this, &ctx](auto & page) { refilter_full_and_notify(page, ctx); });
+		ctx.apply_filtering = old_apply_filtering;
 
 		// filter not active and all children visible - not action required
 		if (not active(m_filter_pred) and page.nvisible == page.children.size()) return;
@@ -1217,7 +1307,7 @@ namespace viewed
 		auto islast  = index_array.end();
 		std::iota(ivfirst, islast, offset);
 
-		if (not viewed::active(m_filter_pred))
+		if (not viewed::active(m_filter_pred) or not apply_filtering)
 		{
 			// if there is no filter - just merge shadow area with visible
 			nvisible_new = slast - vfirst;
@@ -1273,7 +1363,7 @@ namespace viewed
 	auto sftree_facade_qtbase<Traits, ModelBase>::filter_by(Args && ... args) -> viewed::refilter_type
 	{
 		refilter_type rtype = m_filter_pred.set_expr(std::forward<Args>(args)...);
-		refilter_and_notify(rtype);
+		refilter_and_notify(rtype, m_root);
 
 		return rtype;
 	}
@@ -1285,7 +1375,7 @@ namespace viewed
 		m_sort_pred = sort_pred_type(std::forward<Args>(args)...);
 		sftree_detail::set_traits(&m_sort_pred, &m_traits);
 
-		sort_and_notify();
+		sort_and_notify(m_root);
 	}
 
 	/************************************************************************/
@@ -1295,6 +1385,7 @@ namespace viewed
 	template <class reset_context>
 	void sftree_facade_qtbase<Traits, ModelBase>::reset_page(page_type & page, reset_context & ctx)
 	{
+		ctx.apply_filtering |= &page == m_filter_root;
 		auto & container = page.children;
 
 		while (ctx.first != ctx.last)
@@ -1344,7 +1435,7 @@ namespace viewed
 		auto refs_last  = refs.end();
 
 		// apply filtering
-		auto refs_pp = viewed::active(fpred)
+		auto refs_pp = viewed::active(fpred) or ctx.apply_filtering
 		    ? std::partition(refs_first, refs_last, fpred)
 		    : refs_last;
 
@@ -1384,6 +1475,8 @@ namespace viewed
 
 		newctx.model_index_first = ctx.model_index_first;
 		newctx.model_index_last = ctx.model_index_last;
+
+		newctx.apply_filtering = ctx.apply_filtering;
 
 		return newctx;
 	}
@@ -1496,8 +1589,10 @@ namespace viewed
 		auto & container = page.children;
 		auto & seq_view  = container.template get<by_seq>();
 		auto & code_view = container.template get<by_code>();
+
 		auto oldsz = container.size();
 		ctx.inserted_diff = ctx.updated_diff = ctx.erased_diff = -1;
+		ctx.apply_filtering |= &page == m_filter_root;
 
 		// we have 3 groups of elements: inserted, updated, erased
 		// traits provide us with parse_path, is_child methods, with those we can break leafs elements into tree structure.
@@ -1570,14 +1665,14 @@ namespace viewed
 				std::tie(it, inserted) = container.insert(std::move(child));
 			}			
 
-			// step 3: process child recursively
+			// step 3: process children recursively
 			update_page_and_notify(*child_page, newctx);
 
 			// step 4: the child page itself is our child, and as leafs is inserted/updated
 			auto seqit = container.template project<by_seq>(it);
 			auto pos = seqit - seq_view.begin();
 			// if page does not have any children - it should be removed
-			if (child_page->children.size() == 0)
+			if (child_page->children.size() == 0 and child_page != m_filter_root)
 				// actual erasion will be done later in rearrange_children_and_notify
 				*ctx.removed_last++ = pos;
 			else if (not inserted)
@@ -1664,7 +1759,7 @@ namespace viewed
 
 		// partition visible indexes by those passing filtering predicate
 		auto index_pass_pred = [vfirst, fpred](int index) { return fpred(vfirst[index]); };
-		auto vchanged_pp = viewed::active(m_filter_pred) 
+		auto vchanged_pp = viewed::active(m_filter_pred) or ctx.apply_filtering
 			? std::partition(vchanged_first, vchanged_last, index_pass_pred)
 			: vchanged_last;
 
@@ -1698,7 +1793,7 @@ namespace viewed
 		// -------------------------------------------------------------------------------
 		// |                           |sfirst                     |slast
 
-		if (not viewed::active(m_filter_pred))
+		if (not viewed::active(m_filter_pred) or not ctx.apply_filtering)
 		{
 			// remove marked elements from [vfirst; vlast)
 			vlast  = std::remove(vfirst, vlast, nullptr);
@@ -1828,6 +1923,8 @@ namespace viewed
 		ctx.index_array   = &index_array;
 		ctx.inverse_array = &inverse_buffer_array;
 		ctx.vptr_array    = &valptr_array;
+
+		ctx.apply_filtering = m_filter_root == nullptr;
 
 		ctx.erased_first   = erased_first;
 		ctx.erased_last    = erased_last;
