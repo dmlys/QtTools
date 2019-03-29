@@ -367,6 +367,8 @@ namespace viewed
 		template <class RandomAccessIterator>
 		void group_by_paths(RandomAccessIterator first, RandomAccessIterator last);
 
+		bool is_ours_index(const QModelIndex & idx) const noexcept { return idx.model() == this; }
+
 	protected: // core QAbstractItemModel functionality implementation
 		/// creates index for element with row, column in given page, this is just more typed version of QAbstractItemModel::createIndex
 		QModelIndex create_index(int row, int column, page_type * ptr) const;
@@ -729,6 +731,7 @@ namespace viewed
 	inline auto sftree_facade_qtbase<Traits, ModelBase>::get_page(const QModelIndex & index) const -> page_type *
 	{
 		assert(index.isValid());
+		assert(index.model() == this);
 		return static_cast<page_type *>(index.internalPointer());
 	}
 
@@ -749,6 +752,9 @@ namespace viewed
 		if (not parent.isValid())
 			return qint(get_children_count(&m_root));
 
+		if (not is_ours_index(parent))
+			return -1;
+
 		const auto & val = get_ielement_ptr(parent);
 		return qint(get_children_count(val));
 	}
@@ -756,7 +762,8 @@ namespace viewed
 	template <class Traits, class ModelBase>
 	QModelIndex sftree_facade_qtbase<Traits, ModelBase>::parent(const QModelIndex & index) const
 	{
-		if (not index.isValid()) return {};
+		if (not index.isValid())      return {};
+		if (not is_ours_index(index)) return {};
 
 		page_type * page = get_page(index);
 		assert(page);
@@ -783,6 +790,9 @@ namespace viewed
 		}
 		else
 		{
+			if (not is_ours_index(parent))
+				return {};
+
 			auto & element = get_ielement_ptr(parent);
 			auto count = get_children_count(element);
 
@@ -811,6 +821,9 @@ namespace viewed
 			cur_page = &m_root;
 		else
 		{
+			if (not is_ours_index(root))
+				return {};
+
 			const auto & val_ptr = get_ielement_ptr(root);
 			if (val_ptr.index() == LEAF)
 				return QModelIndex(); // leafs do not have children
