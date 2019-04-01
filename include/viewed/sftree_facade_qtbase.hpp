@@ -231,7 +231,7 @@ namespace viewed
 		// Children container is partitioned is such way that first comes visible elements, after them shadowed - those who does not pass filter criteria.
 		// Whenever filter criteria changes, or elements are changed - elements are moved to/from shadow/visible part according to changes.
 
-		struct page_type
+		struct alignas(std::max_align_t) page_type
 		{
 			page_type *      parent = nullptr; // our parent
 			std::size_t      nvisible = 0;     // number of visible elements in container, see above
@@ -239,12 +239,13 @@ namespace viewed
 			node_type        node;             // node data
 
 			page_type(const self_type * self) : children(create_container(self)) {}
+			page_type(ext::noinit_type val)   : children(create_container(val))  {}
 		};
 
 		struct get_children_type
 		{
 			using result_type = const ivalue_container &;
-			result_type operator()(const leaf_type & leaf) const { return ms_empty_container; }
+			result_type operator()(const leaf_type & leaf) const { return ms_empty_page.children; }
 			result_type operator()(const page_type & page) const { return page.children; }
 			result_type operator()(const ivalue_ptr & val) const { return viewed::visit(*this, val); }
 
@@ -345,7 +346,8 @@ namespace viewed
 
 	protected:
 		static const pathview_type     ms_empty_path;
-		static const ivalue_container  ms_empty_container;
+		static const page_type         ms_empty_page;
+		static const ivalue_ptr        ms_empty_ivalue_ptr;
 
 	protected:
 		// our statefull traits
@@ -524,11 +526,14 @@ namespace viewed
 	/*                   class statics and page creation                    */
 	/************************************************************************/
 	template <class Traits, class ModelBase>
-	const typename sftree_facade_qtbase<Traits, ModelBase>::ivalue_container sftree_facade_qtbase<Traits, ModelBase>::ms_empty_container
-		= sftree_facade_qtbase<Traits, ModelBase>::create_container(ext::noinit);
+	const typename sftree_facade_qtbase<Traits, ModelBase>::pathview_type sftree_facade_qtbase<Traits, ModelBase>::ms_empty_path;
 
 	template <class Traits, class ModelBase>
-	const typename sftree_facade_qtbase<Traits, ModelBase>::pathview_type sftree_facade_qtbase<Traits, ModelBase>::ms_empty_path;
+	const typename sftree_facade_qtbase<Traits, ModelBase>::page_type sftree_facade_qtbase<Traits, ModelBase>::ms_empty_page(ext::noinit);
+
+	template <class Traits, class ModelBase>
+	const typename sftree_facade_qtbase<Traits, ModelBase>::ivalue_ptr sftree_facade_qtbase<Traits, ModelBase>::ms_empty_ivalue_ptr = &ms_empty_page;
+
 
 	template <class Traits, class ModelBase>
 	typename sftree_facade_qtbase<Traits, ModelBase>::ivalue_container sftree_facade_qtbase<Traits, ModelBase>::create_container(const self_type * self)
@@ -742,8 +747,11 @@ namespace viewed
 		assert(page);
 
 		auto & seq_view = page->children.template get<by_seq>();
-		assert(index.row() < get_children_count(page));
-		return seq_view[index.row()];
+		//assert(index.row() < get_children_count(page));
+		if (index.row() < get_children_count(page))
+			return seq_view[index.row()];
+		else
+			return ms_empty_ivalue_ptr;
 	}
 
 	template <class Traits, class ModelBase>
