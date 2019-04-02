@@ -9,6 +9,8 @@ CppApplication
 
 	Depends { name: "Qt"; submodules: ["core", "gui", "widgets"] }
 
+	Depends { name: "ProjectSettings"; required: false }
+
 	cpp.cxxLanguageVersion : "c++17"
 	cpp.cxxFlags: project.additionalCxxFlags
 	cpp.driverFlags: project.additionalDriverFlags

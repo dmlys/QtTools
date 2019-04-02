@@ -8,6 +8,7 @@ CppApplication
 	Depends { name: "cpp" }
 	Depends { name: "extlib" }
 	Depends { name: "QtTools" }
+	Depends { name: "ProjectSettings"; required: false }
 
 	Depends { name: "Qt"; submodules: ["core", "gui", "widgets"] }
 
