@@ -386,7 +386,7 @@ namespace viewed
 		{
 			auto ptr = *it;
 			auto found_it = std::lower_bound(updated_first, updated_last, ptr);
-			if (found_it != updated_last and ptr == *found_it) *it = viewed::mark_pointer(ptr);
+			if (found_it != updated_last and ptr == *found_it) *found_it = viewed::mark_pointer(ptr);
 		}
 
 		updated_last = std::remove_if(updated_first, updated_last, viewed::marked_pointer);

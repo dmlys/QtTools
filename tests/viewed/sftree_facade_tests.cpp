@@ -367,6 +367,28 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(node_leaf_transformation, model_type, test_types)
 	BOOST_CHECK_EQUAL(model.rowCount(idx), 1);
 }
 
+BOOST_AUTO_TEST_CASE_TEMPLATE(duplicate_tests, model_type, test_types)
+{
+	auto data1 = {"folder", "folder", "folder"};
+	auto data2 = {"folder", "folder", "folder"};
+
+	using traits = ::traits<model_type>;
+	model_type model = traits::create();
+	traits::assign(model, data1);
+
+	QPersistentModelIndex idx = model.index(0, 0);
+	BOOST_CHECK(idx.isValid());
+	BOOST_CHECK_EQUAL(model.rowCount(), 1);
+	BOOST_CHECK_EQUAL(model.rowCount(idx), 0);
+
+
+	traits::upsert(model, data2);
+
+	BOOST_CHECK(idx.isValid());
+	BOOST_CHECK_EQUAL(model.rowCount(), 1);
+	BOOST_CHECK_EQUAL(model.rowCount(idx), 0);
+}
+
 BOOST_AUTO_TEST_CASE(model_view_reset)
 {
 	auto data =
