@@ -268,7 +268,7 @@ namespace QtTools::NotificationSystem
 			popup->SetBackgroundBrush(brush);
 		else
 		{
-			static constexpr auto getter = [](auto val) { return val; };
+			constexpr auto getter = [](auto val) { return val; };
 			unsigned lvl = n.Level() - NotificationLevel::Error;
 
 			auto colors = GetColors();
@@ -286,7 +286,7 @@ namespace QtTools::NotificationSystem
 			msecs = qvariant_cast<int>(prop);
 		else
 		{
-			static constexpr auto getter = [](auto val) { return val; };
+			constexpr auto getter = [](auto val) { return val; };
 			unsigned lvl = n.Level() - NotificationLevel::Error;
 
 			auto timeouts = GetExpirationTimeouts();

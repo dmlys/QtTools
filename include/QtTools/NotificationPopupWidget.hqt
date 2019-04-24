@@ -14,7 +14,7 @@ namespace QtTools
 	/// 
 	/// This class is more of a base, it provides only background, frame and a shadow effect.
 	/// You a expected to add content, overriding paintEvent, sizeHint,
-	/// or simplier adding child widget(s) and setting layout of NotificationPopupWidget.
+	/// or simpler adding child widget(s) and setting layout of NotificationPopupWidget.
 	/// 
 	/// Also on RMB click widget starts move out animation 
 	/// to nearest left or right parent window edge and then auto closes.
@@ -23,7 +23,7 @@ namespace QtTools
 	///  This widget set Qt::WA_DeleteOnClose attribute in constructor
 	/// 
 	/// TECHNICAL ASPECTS:
-	///  This widget can be both Qt::Widget and Qt::Window(use contructor and setWindowFlag method).
+	///  This widget can be both Qt::Widget and Qt::Window(use constructor and setWindowFlag method).
 	///  If it is a Qt::Window it will automatically have Qt::WA_TranslucentBackground.
 	///  Due how Qt works widget cannot draw shadow effect outside it's own widget area on non qt-windows.
 	///  Instead this widget draws shadow always inside it's area, setting margins to add needed shadow+frame space.
