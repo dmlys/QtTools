@@ -575,7 +575,7 @@ namespace viewed
 	///
 	/// consider you have same type leaf/node, or their members have same name:
 	///  now you want to write something like: viewed::visit([](auto * item) { return item->something; }, ivalue_ptr var);
-	///  sadly it will not work, because ivalue_ptr - variant of leaf and page, and page holds node as node member.
+	///  sadly it will not work, because ivalue_ptr - variant of leaf and page, and page holds node as member.
 	///
 	/// with this class you can write:
 	///  viewed::visit(node_accessor([](auto * item) { item->something; }, ivalue_ptr var);
@@ -603,7 +603,7 @@ namespace viewed
 		{
 			return [pred = std::forward<Pred>(pred)](auto && ... args) mutable -> decltype(auto)
 			{
-				return std::move(pred)(unwrap(std::forward<decltype(args)>(args))...);
+				return pred(unwrap(std::forward<decltype(args)>(args))...);
 			};
 		}
 	};
