@@ -78,17 +78,18 @@ namespace QtTools::NotificationSystem
 		// when calculating sizeHint - height depends on width because of word splitting,
 		// width itself can't be calculated - where to split words?
 		// QAbstractItemView provides default viewport size via option.rect.size(),
-		// but that depends on current widget size: it can be quite big or very small.
+		// but that size depends on current widget size: it can be quite big or very small.
 		// 
 		// So first take on width is: option.rect.width() but no less than 40 * fontMetrics.averageCharWidth() or m_curMaxWidth(described next)
-		// Than with layouting text part set it to qtextdoc.idealWidth()
+		// Than with layouting text part - set width to qtextdoc.idealWidth()
 		// 
-		// After each sizeHint view will remember y-coordinate where that item should be drawn: nextY = curY + sizeHint.height().
+		// After each sizeHint QAbstractItemView will remember y-coordinate where that item should be drawn: nextY = curY + sizeHint.height().
 		// Width will be maximum of all size hints.
 		// 
 		// There is a problem here: width is not constant for all elements, 
-		// it can be different because it depends on text itself(longer words, break positions),
+		// it can be different because it depends on text itself(text lengths itself, longer words, break positions),
 		// for some elements idealWidth() would return bigger than for others.
+		//
 		// When view will draw them - they all will have the same width - maximum of all,
 		// and smaller ones can/will have fewer rows because of word splitting and increased width.
 		// 
@@ -98,7 +99,7 @@ namespace QtTools::NotificationSystem
 		// 
 		// Note that delegate does not control loop on elements, view does that internally.
 		// To force recalculation delegate signal can be used: sizeHintChanged(QModelIndex changed)
-		// changed argument actually is ignored by views normally(at least QListView does so) and just whole relayout is initiated
+		// changed argument actually is ignored by QAbstractItemView and derived classes normally(at least QListView does so) and just whole relayout is initiated
 		mutable int m_curMaxWidth = 0;
 		// when QAbstractItemView widget is resized m_curMaxWidth needs to be reset,
 		// detect it by remember old view widget size and comparing to current one.
