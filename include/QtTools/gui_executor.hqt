@@ -1,0 +1,240 @@
+﻿#pragma once
+#include <memory>
+#include <vector>
+
+#include <mutex>
+#include <atomic>
+
+#include <boost/intrusive/list.hpp>
+#include <ext/intrusive_ptr.hpp>
+#include <ext/future.hpp>
+
+#include <QtCore/QObject>
+
+namespace QtTools
+{
+	/// Simple gui thread executor, executes submitted tasks in a gui thread(actually thread this QObject belongs),
+	/// that thread must have gui loop(QEventLoop).
+	/// Internally it uses Qt::QueuedConnection mechanism, and this class - sort of a wrapper.
+	/// 
+	/// Thread from which actions are executed - is thread to which belongs this object.
+	/// See qt thread association rules and methods, like moveToThread,
+	/// by default gui_executor belongs to thread from which is was created.
+	class gui_executor : public QObject
+	{
+		Q_OBJECT
+		
+	private:
+		using hook_type = boost::intrusive::list_base_hook<
+			boost::intrusive::link_mode<boost::intrusive::link_mode_type::normal_link>
+		>;
+
+		/// base interface for submitted tasks,
+		/// tasks are hold in intrusive linked list.
+		class task_base : public hook_type
+		{
+		public:
+			virtual ~task_base() = default;
+
+			// note: addref, release are present in ext::packaged_once_task_impl, that can issue a conflict,
+			// if signature same, but return value different - it's a error.
+			// just name them differently, it's internal private class.
+			virtual void task_addref()  noexcept = 0;
+			virtual void task_release() noexcept = 0;
+			virtual void task_abandone() noexcept = 0;
+			virtual void task_execute() noexcept = 0;
+
+		public:
+			friend inline void intrusive_ptr_add_ref(task_base * ptr) noexcept { ptr->task_addref(); }
+			friend inline void intrusive_ptr_release(task_base * ptr) noexcept { ptr->task_release(); }
+			friend inline void intrusive_ptr_use_count(const task_base * ptr) noexcept {}
+		};
+
+		/// implementation of task_base templated by Functor
+		template <class Functor, class ResultType>
+		class task_impl :
+			public task_base,
+			public ext::packaged_once_task_impl<Functor, ResultType()>
+		{
+			using base_type = ext::packaged_once_task_impl<Functor, ResultType()>;
+
+		public:
+			void task_addref()  noexcept override { base_type::addref(); }
+			void task_release() noexcept override { base_type::release(); }
+			void task_abandone() noexcept override { base_type::release_promise(); }
+			void task_execute() noexcept override { base_type::execute(); }
+
+		public:
+			// inherit constructors
+			using base_type::base_type;
+
+		public:
+			friend inline void intrusive_ptr_add_ref(task_impl * ptr) noexcept { ptr->task_addref(); }
+			friend inline void intrusive_ptr_release(task_impl * ptr) noexcept { ptr->task_release(); }
+			friend inline void intrusive_ptr_use_count(const task_impl * ptr) noexcept {}
+		};
+
+
+		class delayed_task_continuation :
+			public ext::continuation_base,
+			public hook_type
+		{
+			friend gui_executor;
+
+			gui_executor * m_owner;
+			ext::intrusive_ptr<task_base> m_task;
+
+		public:
+			void continuate(shared_state_basic * caller) noexcept override;
+			void abandone() noexcept;
+
+		public:
+			delayed_task_continuation(gui_executor * owner, ext::intrusive_ptr<task_base> task)
+				: m_owner(owner), m_task(std::move(task)) {}
+		};
+
+	private:
+		using item_list_option = boost::intrusive::base_hook<hook_type>;
+
+		using task_list_type = boost::intrusive::list<
+			task_base, item_list_option,
+			boost::intrusive::constant_time_size<false>
+		>;
+
+		using delayed_task_continuation_list = boost::intrusive::list<
+			delayed_task_continuation, item_list_option,
+			boost::intrusive::constant_time_size<false>
+		>;
+
+	private:
+		// linked list of task
+		task_list_type m_tasks;
+
+		// delayed tasks are little tricky, for every one - we create a service continuation,
+		// which when fired, adds task to task_list.
+		// Those can work and fire when we are being destructed,
+		// gui_executor lifetime should not linger on delayed_task - they should become abandoned.
+		// Nevertheless we have lifetime problem.
+		//
+		// so we store those active service continuations in a list:
+		//  - When continuation is fired it checks if it's taken(future internal helper flag):
+		//    * if yes - gui_executor is gone, nothing to do;
+		//    * if not - gui_executor is still there and we should add task to a list;
+		//
+		//  - When destructing where are checking each continuation if it's taken(future internal helper flag):
+		//   * if successful - service continuation is sort of cancelled and it will not access gui_executor
+		//   * if not - continuation is firing right now somewhere in the middle,
+		//     so destructor must wait until it finishes and then complete destruction.
+		delayed_task_continuation_list m_delayed;
+
+		// how many delayed_continuations were not "taken/cancelled" at destruction,
+		// and how many we must wait - it's sort of a semaphore.
+		std::size_t m_delayed_count = 0;
+
+		mutable bool m_should_emit = true;
+		mutable std::mutex m_mutex;
+		mutable std::condition_variable m_event;
+		
+	private:
+		/// Takes all pending actions from internal list
+		auto take_actions() -> task_list_type;
+
+	private:
+		Q_SLOT   void emit_accamulated_actions();
+		Q_SIGNAL void emit_actions_availiable();
+
+	public:
+		/// Adds action/actions to internal queue
+		template <class Functor>
+		auto submit(Functor && functor) ->
+			ext::future<std::invoke_result_t<std::decay_t<Functor>>>;
+
+		template <class Future, class Functor>
+		auto submit(Future future, Functor && functor) ->
+			ext::future<std::invoke_result_t<std::decay_t<Functor>, Future>>;
+
+		/// clears all not already executed tasks(including delayed ones).
+		/// Associated futures status become abandoned
+		void clear() noexcept;
+		
+	public:
+		gui_executor(QObject * parent = nullptr);
+		~gui_executor() noexcept;
+		
+		Q_DISABLE_COPY(gui_executor);
+	};
+
+
+
+	template <class Functor>
+	auto gui_executor::submit(Functor && functor) ->
+		ext::future<std::invoke_result_t<std::decay_t<Functor>>>
+	{
+		using result_type = std::invoke_result_t<std::decay_t<Functor>>;
+		using task_type   = task_impl<std::decay_t<Functor>, result_type>;
+		using future_type = ext::future<result_type>;
+
+		auto task = ext::make_intrusive<task_type>(std::forward<Functor>(functor));
+		future_type fut {task};
+
+		bool should_emit;
+		{
+			std::lock_guard lk(m_mutex);
+			m_tasks.push_back(*task.release());
+			should_emit = std::exchange(m_should_emit, false);
+		}
+
+		if (should_emit) emit_actions_availiable();
+
+		return fut;
+	}
+
+	template <class Future, class Functor>
+	auto gui_executor::submit(Future future, Functor && functor) ->
+		ext::future<std::invoke_result_t<std::decay_t<Functor>, Future>>
+	{
+		static_assert(ext::is_future_type_v<Future>);
+
+		auto handle = future.handle();
+		auto wrapped = [func = std::forward<Functor>(functor), future = std::move(future)]() mutable
+		{
+			return std::move(func)(std::move(future));
+		};
+
+		using functor_type = decltype(wrapped);
+		using result_type  = std::invoke_result_t<functor_type>;
+		using task_type    = task_impl<functor_type, result_type>;
+		using future_type  = ext::future<result_type>;
+
+		auto task = ext::make_intrusive<task_type>(std::move(wrapped));
+		future_type fut {task};
+
+		if (handle->is_deferred())
+		{	// make it ready
+			handle->wait();
+
+			bool should_emit;
+			{
+				std::lock_guard lk(m_mutex);
+				m_tasks.push_back(*task.release());
+				should_emit = std::exchange(m_should_emit, false);
+			}
+
+			if (should_emit) emit_actions_availiable();
+		}
+		else
+		{
+			auto cont = ext::make_intrusive<delayed_task_continuation>(this, std::move(task));
+
+			{
+				std::lock_guard lk(m_mutex);
+				m_delayed.push_back((cont.addref(), *cont.get()));
+			}
+
+			handle->add_continuation(cont.get());
+		}
+
+		return fut;
+
+	}
+}
