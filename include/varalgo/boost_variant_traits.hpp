@@ -7,7 +7,7 @@
 namespace varalgo
 {
 	template <class Pred>
-	struct variant_traits<boost::reference_wrapper<Pred>>
+	struct variant_traits<boost::reference_wrapper<Pred>> : std::integral_constant<bool, variant_traits<Pred>::value>
 	{
 		template <class Visitor, class ... Variants>
 		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
@@ -17,7 +17,7 @@ namespace varalgo
 	};
 
 	template <class Pred>
-	struct variant_traits<boost::reference_wrapper<const Pred>>
+	struct variant_traits<boost::reference_wrapper<const Pred>> : std::integral_constant<bool, variant_traits<Pred>::value>
 	{
 		template <class Visitor, class ... Variants>
 		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
@@ -27,7 +27,7 @@ namespace varalgo
 	};
 
 	template <class ... VariantTypes>
-	struct variant_traits<boost::variant<VariantTypes...>>
+	struct variant_traits<boost::variant<VariantTypes...>> : std::true_type
 	{
 		template <class Visitor, class ... Variants>
 		inline static auto visit(Visitor && vis, Variants && ... vars)

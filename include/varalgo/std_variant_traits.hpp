@@ -5,7 +5,7 @@
 namespace varalgo
 {
 	template <class Pred>
-	struct variant_traits
+	struct variant_traits : std::false_type
 	{
 		template <class Visitor, class ... Variants>
 		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
@@ -15,7 +15,7 @@ namespace varalgo
 	};
 
 	template <class Pred>
-	struct variant_traits<std::reference_wrapper<Pred>>
+	struct variant_traits<std::reference_wrapper<Pred>> : std::integral_constant<bool, variant_traits<Pred>::value>
 	{
 		template <class Visitor, class ... Variants>
 		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
@@ -25,7 +25,7 @@ namespace varalgo
 	};
 
 	template <class Pred>
-	struct variant_traits<std::reference_wrapper<const Pred>>
+	struct variant_traits<std::reference_wrapper<const Pred>> : std::integral_constant<bool, variant_traits<Pred>::value>
 	{
 		template <class Visitor, class ... Variants>
 		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
@@ -35,7 +35,7 @@ namespace varalgo
 	};
 
 	template <class ... Types>
-	struct variant_traits<std::variant<Types...>>
+	struct variant_traits<std::variant<Types...>> : std::true_type
 	{
 		template <class Visitor, class ... Variants>
 		inline static constexpr auto visit(Visitor && vis, Variants && ... vars)
