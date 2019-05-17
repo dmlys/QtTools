@@ -28,7 +28,7 @@ namespace viewed
 		template <class Arg>
 		using helper = get_functor<Index, Arg>;
 
-		using type = viewed::wrap_functor_type_t<helper, Functor>;
+		using type = viewed::template_wrap_functor_type_t<helper, Functor>;
 	};
 
 	template <std::size_t Index, class Functor>

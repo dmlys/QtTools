@@ -6,7 +6,7 @@ namespace viewed
 {
 	/// преобразует предикат в ext::indirect_functor<Pred>
 	template <class Pred>
-	using make_indirect_functor_type_t = viewed::wrap_functor_type_t<ext::indirect_functor, Pred>;
+	using make_indirect_functor_type_t = viewed::template_wrap_functor_type_t<ext::indirect_functor, Pred>;
 
 	template <class Pred>
 	inline auto make_indirect_functor(const Pred & pred)
