@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include <ext/functors/indirect_functor.hpp>
-#include <viewed/wrap_functor.hpp>
+#include <varalgo/wrap_functor.hpp>
 
 namespace viewed
 {

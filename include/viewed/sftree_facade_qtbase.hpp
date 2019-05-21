@@ -6,12 +6,12 @@
 
 #include <viewed/algorithm.hpp>
 #include <viewed/forward_types.hpp>
-#include <viewed/wrap_functor.hpp>
 #include <viewed/get_functor.hpp>
 #include <viewed/indirect_functor.hpp>
 #include <viewed/qt_model.hpp>
 #include <viewed/pointer_variant.hpp>
 
+#include <varalgo/wrap_functor.hpp>
 #include <varalgo/sorting_algo.hpp>
 #include <varalgo/on_sorted_algo.hpp>
 

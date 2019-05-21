@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <utility>     // for std::get
 #include <tuple>       // for std::get
-#include <viewed/wrap_functor.hpp>
+#include <varalgo/wrap_functor.hpp>
 
 namespace viewed
 {
