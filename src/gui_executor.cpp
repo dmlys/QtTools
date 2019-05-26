@@ -108,8 +108,6 @@ namespace QtTools
 	{
 		// If this object is destroyed nobody should be invoking any methods of this class
 		// (with exception our internal classes, like delayed_task_continuation).
-		//
-		// TODO: can std::atomic_memory_fence(std::memory_order_acquire/std::memory_order_seq_cst) used?
 		clear();
 	}
 }

@@ -116,12 +116,12 @@ namespace QtTools
 		// gui_executor lifetime should not linger on delayed_task - they should become abandoned.
 		// Nevertheless we have lifetime problem.
 		//
-		// so we store those active service continuations in a list:
+		// So we store those active service continuations in a list:
 		//  - When continuation is fired it checks if it's taken(future internal helper flag):
 		//    * if yes - gui_executor is gone, nothing to do;
-		//    * if not - gui_executor is still there and we should add task to a list;
+		//    * if not - gui_executor is still there - we should add task to a list;
 		//
-		//  - When destructing where are checking each continuation if it's taken(future internal helper flag):
+		//  - When destructing we are checking each continuation if it's taken(future internal helper flag):
 		//   * if successful - service continuation is sort of cancelled and it will not access gui_executor
 		//   * if not - continuation is firing right now somewhere in the middle,
 		//     so destructor must wait until it finishes and then complete destruction.
