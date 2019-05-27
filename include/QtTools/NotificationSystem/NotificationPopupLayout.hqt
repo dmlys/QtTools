@@ -59,9 +59,9 @@ namespace QtTools::NotificationSystem
 		NotificationCenter * m_ncenter = nullptr;
 		/// our parent widget, or desktop if null
 		QPointer<QWidget> m_parent;
-		/// our parent widget geometry where popups are liad out
+		/// our parent widget geometry where popups are laid out
 		QRect m_geometry;
-		/// rect corner where popups are liad out
+		/// rect corner where popups are laid out
 		Qt::Corner m_corner = Qt::BottomRightCorner;
 		/// popups simultaneous limit
 		unsigned m_widgetsLimit = 5;
@@ -177,6 +177,7 @@ namespace QtTools::NotificationSystem
 	public:
 		NotificationPopupLayout(QObject * parent = nullptr);
 		NotificationPopupLayout(NotificationCenter & center, QObject * parent = nullptr);
+		NotificationPopupLayout(NotificationCenter & center, QWidget * parent);
 		virtual ~NotificationPopupLayout();
 	};
 }

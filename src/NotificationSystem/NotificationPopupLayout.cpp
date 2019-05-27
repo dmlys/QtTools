@@ -75,6 +75,14 @@ namespace QtTools::NotificationSystem
 		Init(center);
 	}
 
+	NotificationPopupLayout::NotificationPopupLayout(NotificationCenter & center, QWidget * widget)
+	    : NotificationPopupLayout(widget)
+	{
+		Init(center);
+		SetParent(widget);
+	}
+
+
 	void NotificationPopupLayout::Init(NotificationCenter & center)
 	{
 		SetNotificationCenter(&center);		
@@ -542,7 +550,7 @@ namespace QtTools::NotificationSystem
 	bool NotificationPopupLayout::eventFilter(QObject * watched, QEvent * event)
 	{
 		auto evType = event->type();
-		if (evType == QEvent::Resize)
+		if (evType == QEvent::Resize and watched == m_parent)
 		{
 			//auto * rev = static_cast<QResizeEvent *>(event);
 			ParentResized();

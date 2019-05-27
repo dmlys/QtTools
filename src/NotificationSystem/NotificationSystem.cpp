@@ -55,6 +55,26 @@ namespace QtTools::NotificationSystem
 		return toPlain(m_fullText, m_fullTextFmt);
 	}
 
+	QString SimpleNotification::FullText() const
+	{
+		return m_fullText.isNull() ? m_text : m_fullText;
+	}
+
+	QString SimpleNotification::FullText(QString fullText)
+	{
+		return std::exchange(m_fullText, std::move(fullText));
+	}
+
+	Qt::TextFormat SimpleNotification::FullTextFmt() const
+	{
+		return m_fullText.isNull() ? m_fullTextFmt : m_fullTextFmt;
+	}
+
+	Qt::TextFormat SimpleNotification::FullTextFmt(Qt::TextFormat fmt)
+	{
+		return std::exchange(m_fullTextFmt, std::move(fmt));
+	}
+
 	auto SimpleNotification::Priority() const -> NotificationPriority
 	{
 		return static_cast<NotificationPriority>(m_priority);

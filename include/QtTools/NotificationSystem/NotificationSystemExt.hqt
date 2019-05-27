@@ -58,12 +58,12 @@ namespace QtTools::NotificationSystem
 		virtual Qt::TextFormat TextFmt() const override             { return m_textFmt; }
 		virtual Qt::TextFormat TextFmt(Qt::TextFormat fmt) override { return std::exchange(m_textFmt, fmt); }
 
-		virtual QString FullText() const override           { return m_fullText; }
-		virtual QString FullText(QString FullText) override { return std::exchange(m_fullText, std::move(FullText)); }
+		virtual QString FullText() const override;
+		virtual QString FullText(QString fullText) override;
 		virtual QString PlainFullText() const override;
 
-		virtual Qt::TextFormat FullTextFmt() const override             { return m_fullTextFmt; }
-		virtual Qt::TextFormat FullTextFmt(Qt::TextFormat fmt) override { return std::exchange(m_fullTextFmt, fmt); }
+		virtual Qt::TextFormat FullTextFmt() const override;
+		virtual Qt::TextFormat FullTextFmt(Qt::TextFormat fmt) override;
 
 		virtual QIcon Icon() const override      { return m_icon; }
 		virtual QIcon Icon(QIcon icon) override  { return std::exchange(m_icon, std::move(icon)); }
