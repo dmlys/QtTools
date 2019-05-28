@@ -5,7 +5,7 @@ namespace QtTools
 	void gui_executor::delayed_task_continuation::continuate(shared_state_basic * caller) noexcept
 	{
 		auto owner = m_owner;
-		bool notify;
+		bool notify, should_emit;
 
 		if (not mark_marked())
 			// gui_executor is destructed or destructing
@@ -21,11 +21,14 @@ namespace QtTools
 			list.erase(it);
 
 			owner->m_tasks.push_back(*m_task.release());
-			notify = delayed_count == 0 || --delayed_count == 0;
+			notify = delayed_count != 0 and --delayed_count == 0;
+			should_emit = std::exchange(owner->m_should_emit, false);
 		}
 
 		// notify gui_executor if needed
 		if (notify) owner->m_event.notify_one();
+		// send signal into gui thread if needed.
+		else if (should_emit) owner->emit_actions_availiable();
 
 		// we were removed from m_delayed - intrusive list,
 		// which does not manage lifetime, decrement refcount
