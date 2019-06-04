@@ -52,19 +52,22 @@ void MainWindow::AssignData(TestTreeModel & model)
 void MainWindow::AssignData(TestTreeViewModel & model)
 {
 	auto data = GenerateAssignData();
-	model.get_owner()->assign(data | ext::moved);
+	auto mdata = data | ext::moved;
+	model.get_owner()->assign(mdata.begin(), mdata.end());
 }
 
 void MainWindow::UpsertData(TestTreeModel & model)
 {
 	auto data = GenerateUpsertData();
-	model.upsert(data | ext::moved);
+	auto mdata = data | ext::moved;
+	model.upsert(mdata.begin(), mdata.end());
 }
 
 void MainWindow::UpsertData(TestTreeViewModel & model)
 {
 	auto data = GenerateUpsertData();
-	model.get_owner()->upsert(data | ext::moved);
+	auto mdata = data | ext::moved;
+	model.get_owner()->upsert(mdata.begin(), mdata.end());
 }
 
 void MainWindow::ClearData(TestTreeModel & model)

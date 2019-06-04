@@ -1289,7 +1289,7 @@ namespace viewed
 
 	/************************************************************************/
 	/*               reset_data methods implementation                      */
-	/************************************************************************/	 
+	/************************************************************************/
 	template <class Traits, class ModelBase>
 	template <class reset_context>
 	void sftree_facade_qtbase<Traits, ModelBase>::reset_page(page_type & page, reset_context & ctx)
@@ -1557,7 +1557,7 @@ namespace viewed
 					container.replace(it, std::move(child));
 				}
 			}
-			else 
+			else
 			{
 				// if creating new page - there definitely was inserted or updated element
 				assert(ctx.updated_diff or ctx.inserted_diff);
@@ -1567,7 +1567,7 @@ namespace viewed
 				child_page->parent = &page;
 				m_traits.set_name(child_page->node, std::move(path), std::move(name));
 				std::tie(it, inserted) = container.insert(std::move(child));
-			}			
+			}
 
 			// step 3: process child recursively
 			update_page_and_notify(*child_page, newctx);
@@ -1663,7 +1663,7 @@ namespace viewed
 
 		// partition visible indexes by those passing filtering predicate
 		auto index_pass_pred = [vfirst, fpred](int index) { return fpred(vfirst[index]); };
-		auto vchanged_pp = viewed::active(m_filter_pred) 
+		auto vchanged_pp = viewed::active(m_filter_pred)
 			? std::partition(vchanged_first, vchanged_last, index_pass_pred)
 			: vchanged_last;
 
@@ -1773,7 +1773,7 @@ namespace viewed
 		{   // remove nullified elements from index array
 			auto point = imiddle;
 			imiddle = std::remove(ifirst, imiddle, -1);
-			ilast = std::remove(point, ilast, -1);			
+			ilast = std::remove(point, ilast, -1);
 			ilast = std::move(point, ilast, imiddle);
 		}
 		

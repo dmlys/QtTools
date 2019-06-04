@@ -55,8 +55,28 @@ namespace
 			return viewed::refilter_type::full;
 		}
 	};
+
+	template <class Model, class Type>
+	inline static auto assign(Model & model, std::initializer_list<Type> ilist)
+	{
+		return model.assign(ilist.begin(), ilist.end());
+	}
+
+	template <class Model, class Type>
+	inline static auto upsert(Model & model, std::initializer_list<Type> ilist)
+	{
+		return model.upsert(ilist.begin(), ilist.end());
+	}
+
+	template <class Model, class Type>
+	inline static auto erase(Model & model, std::initializer_list<Type> ilist)
+	{
+		return model.erase(ilist.begin(), ilist.end());
+	}
+
 } // 'anonymous' namespace
 
+#include <boost/core/demangle.hpp>
 
 BOOST_AUTO_TEST_SUITE(sfset_model_tests)
 
@@ -67,13 +87,13 @@ BOOST_AUTO_TEST_CASE(simple_tests)
 	auto assign_data = {15, 10, 1, 25, 100, 256};
 	auto upsert_data = {15, 10, 900, -200, -100, 0};
 
-	model.assign(assign_data);
+	assign(model, assign_data);
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), 1);
 
 	QPersistentModelIndex idx1 = model.index(0);
 	BOOST_CHECK(idx1.isValid() and idx1.row() == 0);
 
-	model.upsert(upsert_data);
+	upsert(model, upsert_data);
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), -200);
 
 	QPersistentModelIndex idx2 = model.index(0);
@@ -83,7 +103,7 @@ BOOST_AUTO_TEST_CASE(simple_tests)
 	BOOST_CHECK(idx1.isValid());
 	BOOST_CHECK_EQUAL(idx1.row(), 3); // moved to 3 position
 
-	model.assign(assign_data);
+	assign(model, assign_data);
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), 1);
 
 	BOOST_CHECK(idx1.isValid());
@@ -95,7 +115,7 @@ BOOST_AUTO_TEST_CASE(simple_tests)
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), 10);
 
 	auto erase_data = {10, 25};
-	model.erase(erase_data);
+	erase(model, erase_data);
 	BOOST_CHECK_EQUAL(model.rowCount(), 3);
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), 15);
 
@@ -108,6 +128,33 @@ BOOST_AUTO_TEST_CASE(simple_tests)
 	BOOST_CHECK_EQUAL(model.rowCount(), 0);
 }
 
+BOOST_AUTO_TEST_CASE(rename_tests)
+{
+	sfset_model<int, std::less<>, viewed::null_filter> model;
+
+	auto assign_data = {15, 10, 1, 25, 100, 256};
+
+	assign(model, assign_data);
+
+	QPersistentModelIndex idx1 = model.index(0);
+	BOOST_CHECK(idx1.isValid() and idx1.row() == 0);
+
+	model.rename(model.begin(), model.begin() + 2, [](int & val) { val *= 2; });
+
+	auto expected_data = {2, 15, 20, 25, 100, 256};
+
+	BOOST_CHECK_EQUAL_COLLECTIONS(model.begin(), model.end(), expected_data.begin(), expected_data.end());
+	BOOST_CHECK(idx1.isValid() and idx1.row() == 0);
+	BOOST_CHECK_EQUAL(idx1.data().toInt(), 2);
+
+	QPersistentModelIndex idx2 = model.index(5);
+
+	model.rename(256, [](int & val) { val = 2; });
+
+	BOOST_CHECK_EQUAL(model.size(), 6);
+	BOOST_CHECK_EQUAL(idx2.data().toInt(), 256);
+}
+
 BOOST_AUTO_TEST_CASE(simple_filter_tests)
 {
 	using model_type = sfset_model<int, std::greater<>, nratio_filter>;
@@ -115,7 +162,7 @@ BOOST_AUTO_TEST_CASE(simple_filter_tests)
 
 	// reversed         99, 15, 10, 0, -1, -25, -80 in order
 	auto assign_data = {15, 10, -1, 0, -25, 99, -80, };
-	model.assign(assign_data);
+	assign(model, assign_data);
 
 	BOOST_CHECK_EQUAL(model.rowCount(), assign_data.size());
 
@@ -162,7 +209,7 @@ BOOST_AUTO_TEST_CASE(advanced_filter_tests)
 	auto assign_data = {33, 50, -20, 1, 0, 100, -100, 25, 12};
 	decltype(assign_data) expected_data;
 
-	model.assign(assign_data);
+	assign(model, assign_data);
 
 	expected_data = {-100, -20, 0, 1, 12, 25, 33, 50, 100};
 	BOOST_CHECK_EQUAL_COLLECTIONS(model.begin(), model.end(), expected_data.begin(), expected_data.end());

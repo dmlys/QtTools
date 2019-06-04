@@ -27,7 +27,9 @@ namespace viewed
 	struct hash_container_traits
 	{
 		using value_type = Type;
+		using key_type = std::decay_t<std::invoke_result_t<KeyExtractor, const Type &>>;
 		using key_extractor_type = KeyExtractor;
+
 		using hasher = Hash;
 		using key_equal = Equal;
 
@@ -37,7 +39,7 @@ namespace viewed
 		using main_store_type = boost::multi_index_container <
 			value_type,
 			boost::multi_index::indexed_by<
-				boost::multi_index::hashed_unique<KeyExtractor, Hash, Equal>
+				boost::multi_index::hashed_unique<key_extractor_type, hasher, key_equal>
 			>
 		>;
 
@@ -47,10 +49,8 @@ namespace viewed
 		/************************************************************************/
 		/*                   traits functions/functors                          */
 		/************************************************************************/
-		/// function interface can be static function members or static functors members.
-		/// if overloading isn't needed static function members  - will be ok,
-		/// but if you want provide several overloads - use static functors members
-				
+		static key_extractor_type key_extractor(const main_store_type & store) { return store.key_extractor(); }
+
 		static main_store_type make_store(KeyExtractor key_extractor, Hash hash, Equal eq)
 		{
 			using ctor_args = typename main_store_type::ctor_args ;
@@ -62,14 +62,21 @@ namespace viewed
 			);
 		}
 
-		/// obtains pointer from internal_value_type (from main_store_type)
-		static const value_type *  value_pointer(const value_type & val)   { return &val; }
-		static       value_type *  value_pointer(      value_type & val)   { return &val; }
+		template <class Modifier, class Rollback>
+		static void rename(main_store_type & store, typename main_store_type::const_iterator it, Modifier & modifier, Rollback && rollback)
+		{
+			auto oldsize = store.size();
+			store.modify(it, modifier, std::forward<Rollback>(rollback));
+			assert(oldsize == store.size());
+		}
 
-		/// update takes current internal_value_type rvalue as first argument and some generic type as second.
-		/// It updates current value with new data, usually second type is some reference of value_type
-		static void update(value_type & val, const value_type &  newval) { val = newval; }
-		static void update(value_type & val,       value_type && newval) { val = std::move(newval); }
+		/// obtains pointer from internal_value_type (from main_store_type)
+		static auto value_pointer(const value_type & val)   { return &val; }
+		static auto value_pointer(      value_type & val)   { return &val; }
+
+		/// obtains reference from internal_value_type (from main_store_type)
+		static decltype(auto) value_reference(const value_type & val) { return val; }
+		static decltype(auto) value_reference(      value_type & val) { return val; }
 	};
 
 
@@ -149,10 +156,6 @@ namespace viewed
 		key_equal key_eq() const { return base_type::m_store.key_eq(); }
 		hasher    hash_function() const { return base_type::m_store.hash_function(); }
 		key_extractor_type key_extractor() const { return base_type::m_store.key_extractor(); }
-		
-		template <class CompatibleKey>
-		std::pair<const_iterator, const_iterator> equal_range(const CompatibleKey & key) const
-		{ return base_type::m_store.equal_range(key); }
 		
 	public:
 		hash_container(key_extractor_type key_extractor = {}, hasher hash = {}, key_equal eq = {})

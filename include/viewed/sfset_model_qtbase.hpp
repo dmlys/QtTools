@@ -59,9 +59,6 @@ namespace viewed
 
 		using sort_pred_type   = Sorter;
 		using filter_pred_type = Filter;
-
-		static void update(value_type & curval, value_type && newval)      { curval = std::move(newval); }
-		static void update(value_type & curval, const value_type & newval) { curval = newval; }
 	};
 
 	/// deduces and defines traits type for sfset_model_qtbase
@@ -99,10 +96,6 @@ namespace viewed
 	///   key_equal_to_type   - predicate used to compare key for equality, typically std::equal_to<>
 	///   key_less_type       - predicate used to compare key for less, typically std::less<>
 	///   key_hash_type       - functor used to calculate hash from key, typically std::hash<key_type>
-	///
-	///   static void update(value_type & curval, value_type && newval)
-	///   static void update(value_type & curval, const value_type & newval)
-	///        updates current value with new data, usually: curval = std::move(newval);
 	///
 	///   using sort_pred_type = ...
 	///   using filter_pred_type = ...
@@ -291,8 +284,8 @@ namespace viewed
 		const_reference front() const { return m_store.front(); }
 		const_reference back()  const { return m_store[m_nvisible - 1]; }
 
-		size_type size() const noexcept { return m_nvisible; }
-		bool empty()     const noexcept { return m_nvisible; }
+		size_type size() const noexcept { return     m_nvisible; }
+		bool empty()     const noexcept { return not m_nvisible; }
 
 	public:
 		const auto & sort_pred()   const { return m_sort_pred; }
@@ -302,44 +295,72 @@ namespace viewed
 		template <class ... Args> void sort_by(Args && ... args);
 
 	public:
-		/// erases all elements
-		void clear();
+		auto unfiltered_data() const noexcept
+		{ return boost::sub_range<const seq_view_type>(m_store.template get<by_seq>()); }
 
-		/// erases elements [first, last)
+	public:
+		/// clear container and assigns elements from [first, last)
+		template <class SinglePassIterator>
+		void assign(SinglePassIterator first, SinglePassIterator last) { return assign(first, last, viewed::default_assigner); }
+		/// clear container and assigns elements from [first, last)
+		/// updater - functor used to assign records: updater(existing_record, *curit);
+		template <class SinglePassIterator, class Updater>
+		void assign(SinglePassIterator first, SinglePassIterator last, Updater updater);
+
+		/// upserts new record from [first, last)
+		/// records which are already in container will be replaced with new ones
+		template <class SinglePassIterator>
+		void upsert(SinglePassIterator first, SinglePassIterator last) { return upsert(first, last, viewed::default_assigner); }
+		/// upserts new record from [first, last)
+		/// records which are already in container will be replaced with new ones
+		/// updater - functor used to update records: updater(oldrec, *curit);
+		template <class SinglePassIterator, class Updater>
+		void upsert(SinglePassIterator first, SinglePassIterator last, Updater updater);
+
+		/// modifies elements from [first; last) via given modifier
+		template <class Modifier>
+		void modify(const_iterator first, const_iterator last, Modifier modifier);
+		/// modifies element pointed by it via given modifier
+		template <class Modifier>
+		void modify(const_iterator it, Modifier modifier) { return modify(it, std::next(it), std::move(modifier)); }
+		/// modifies elements specified by keys from [first; last) via given modifier
+		template <class SinglePassIterator, class Modifier>
+		void modify(SinglePassIterator first, SinglePassIterator last, Modifier modifier);
+		/// modifies element specified by key via given modifier
+		template <class CompatibleKey, class Modifier>
+		void modify(const CompatibleKey & key, Modifier modifier) { return modify(&key, std::next(&key), std::move(modifier)); }
+
+		/// renames/modifies elements from [first; last) via given modifier
+		/// if new name clashes with already present - element is removed(same as boost::multi_index)
+		template <class Modifier>
+		void rename(const_iterator first, const_iterator last, Modifier modifier);
+		/// renames/modifies element pointed by it via given modifier
+		/// if new name clashes with already present - element is removed(same as boost::multi_index)
+		template <class Modifier>
+		void rename(const_iterator it, Modifier modifier) { return rename(it, std::next(it), std::move(modifier)); }
+		/// renames/modifies elements specified by keys from [first; last) via given modifier
+		/// if new name clashes with already present - element is removed(same as boost::multi_index)
+		template <class SinglePassIterator, class Modifier>
+		void rename(SinglePassIterator first, SinglePassIterator last, Modifier modifier);
+		/// renames/modifies element specified by key via given modifier
+		/// if new name clashes with already present - element is removed(same as boost::multi_index)
+		template <class CompatibleKey, class Modifier>
+		void rename(const CompatibleKey & key, Modifier modifier) { return rename(&key, std::next(&key), std::move(modifier)); }
+
+		/// erases elements [first, last) from internal store and views
 		/// [first, last) must be a valid range
 		const_iterator erase(const_iterator first, const_iterator last);
 		/// erase element pointed by it
-		const_iterator erase(const_iterator it) { return erase(it, std::next(it)); }
+		const_iterator erase(const_iterator it); // { return erase(it, std::next(it)); }
 		/// erase element by key
 		template <class CompatibleKey>
 		size_type erase(const CompatibleKey & key);
-
+		/// erases elements specified by keys from [first; last)
 		template <class SinglePassIterator>
-		auto erase(SinglePassIterator first, SinglePassIterator last)
-			-> std::enable_if_t<std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>, size_type>;
+		size_type erase(SinglePassIterator first, SinglePassIterator last);
 
-		template <class SinglePassRange>
-		auto erase(SinglePassRange && range)
-			-> std::enable_if_t<std::is_convertible_v<ext::range_value_t<SinglePassRange>, key_type>, size_type>
-		{ using std::begin; using std::end; return erase(begin(range), end(range)); }
-
-
-		/// clears container and assigns elements from [first, last)
-		template <class SinglePassIterator>
-		auto assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
-
-		/// upserts new records from [first, last)
-		/// records which are already in container will be replaced with new ones
-		template <class SinglePassIterator>
-		auto upsert(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
-
-		template <class Range>
-		auto upsert(Range && range) -> std::enable_if_t<ext::is_range_v<Range>>
-		{ using std::begin; using std::end; upsert(begin(range), end(range)); }
-
-		template <class Range>
-		auto assign(Range && range) -> std::enable_if_t<ext::is_range_v<Range>>
-		{ using std::begin; using std::end; assign(begin(range), end(range)); }
+		/// erases all elements
+		void clear();
 
 	public:
 		virtual ~sfset_model_qtbase() = default;
@@ -890,8 +911,8 @@ namespace viewed
 
 
 	template <class ... Types>
-	template <class SinglePassIterator>
-	auto sfset_model_qtbase<Types...>::assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
+	template <class SinglePassIterator, class Updater>
+	void sfset_model_qtbase<Types...>::assign(SinglePassIterator first, SinglePassIterator last, Updater updater)
 	{
 		auto & container = m_store;
 		auto & code_view = container.template get<by_code>();
@@ -927,8 +948,8 @@ namespace viewed
 
 			if (not inserted_into_store)
 			{
-				traits_type::update(ext::unconst(*where), std::forward<decltype(val)>(val));
-				auto pos = m_store.template project<by_seq>(where) - seq_view.begin();
+				updater(ext::unconst(*where), std::forward<decltype(val)>(val));
+				auto pos = container.template project<by_seq>(where) - seq_view.begin();
 				auto & ptr = existing_elements[pos];
 				ptr = viewed::mark_pointer(ptr);
 			}
@@ -950,8 +971,8 @@ namespace viewed
 	}
 
 	template <class ... Types>
-	template <class SinglePassIterator>
-	auto sfset_model_qtbase<Types...>::upsert(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
+	template <class SinglePassIterator, class Updater>
+	void sfset_model_qtbase<Types...>::upsert(SinglePassIterator first, SinglePassIterator last, Updater updater)
 	{
 		auto & container = m_store;
 		auto & code_view = container.template get<by_code>();
@@ -960,7 +981,7 @@ namespace viewed
 
 		value_ptr_vector vptr_array;
 		int_vector index_array, affected_indexes;
-		affected_indexes.resize(m_store.size());
+		affected_indexes.resize(container.size());
 		vptr_array.reserve(container.size());
 
 		upsert_context ctx;
@@ -987,9 +1008,9 @@ namespace viewed
 
 			if (not inserted_into_store)
 			{
-				traits_type::update(ext::unconst(*where), std::forward<decltype(val)>(val));
 				auto pos = container.template project<by_seq>(where) - seq_view.begin();
 				*changed_last++ = pos;
+				updater(ext::unconst(*where), std::forward<decltype(val)>(val));
 			}
 		}
 
@@ -997,13 +1018,181 @@ namespace viewed
 	}
 
 	template <class ... Types>
-	void sfset_model_qtbase<Types...>::clear()
+	template <class Modifier>
+	void sfset_model_qtbase<Types...>::modify(const_iterator first, const_iterator last, Modifier modifier)
 	{
-		auto * model = get_model();
-		model->beginResetModel();
-		m_store.clear();
-		m_nvisible = 0;
-		model->endResetModel();
+		if (first == last) return;
+
+		auto & container = m_store;
+		auto & seq_view  = container.template get<by_seq>();
+
+		value_ptr_vector vptr_array;
+		int_vector index_array, affected_indexes;
+		affected_indexes.resize(container.size());
+		vptr_array.reserve(container.size());
+
+		upsert_context ctx;
+		ctx.size         = seq_view.size();
+		ctx.nvisible_ptr = &m_nvisible;
+		ctx.container    = &container;
+		ctx.index_array  = &index_array;
+		ctx.vptr_array   = &vptr_array;
+
+		auto & removed_first = ctx.removed_first = affected_indexes.end();
+		auto & removed_last  = ctx.removed_last  = affected_indexes.end();
+
+		auto & changed_first = ctx.changed_first = affected_indexes.begin();
+		auto & changed_last  = ctx.changed_last  = affected_indexes.begin();
+
+		for (; first != last; ++first)
+		{
+			auto pos = first - seq_view.begin();
+			*changed_last++ = pos;
+			modifier(ext::unconst(*first));
+		}
+
+		rearrange_and_notify(ctx);
+	}
+
+	template <class ... Types>
+	template <class SinglePassIterator, class Modifier>
+	void sfset_model_qtbase<Types...>::modify(SinglePassIterator first, SinglePassIterator last, Modifier modifier)
+	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>);
+
+		if (first == last) return;
+
+		auto & container = m_store;
+		auto & seq_view  = container.template get<by_seq>();
+		auto & code_view = container.template get<by_code>();
+
+		value_ptr_vector vptr_array;
+		int_vector index_array, affected_indexes;
+		affected_indexes.resize(container.size());
+		vptr_array.reserve(container.size());
+
+		upsert_context ctx;
+		ctx.size         = seq_view.size();
+		ctx.nvisible_ptr = &m_nvisible;
+		ctx.container    = &container;
+		ctx.index_array  = &index_array;
+		ctx.vptr_array   = &vptr_array;
+
+		auto & removed_first = ctx.removed_first = affected_indexes.end();
+		auto & removed_last  = ctx.removed_last  = affected_indexes.end();
+
+		auto & changed_first = ctx.changed_first = affected_indexes.begin();
+		auto & changed_last  = ctx.changed_last  = affected_indexes.begin();
+
+		for (; first != last; ++first)
+		{
+			auto && key = *first;
+			auto found_it = code_view.find(std::forward<decltype(key)>(key));
+			if (found_it == code_view.end())
+				continue;
+
+			auto pos = container.template project<by_seq>(found_it) - seq_view.begin();
+			*changed_last++ = pos;
+			modifier(ext::unconst(*found_it));
+		}
+
+		rearrange_and_notify(ctx);
+	}
+
+	template <class ... Types>
+	template <class Modifier>
+	void sfset_model_qtbase<Types...>::rename(const_iterator first, const_iterator last, Modifier modifier)
+	{
+		if (first == last) return;
+
+		auto & container = m_store;
+		auto & seq_view  = container.template get<by_seq>();
+		auto & code_view = container.template get<by_code>();
+
+		value_ptr_vector vptr_array;
+		int_vector index_array, affected_indexes;
+		affected_indexes.resize(container.size());
+		vptr_array.reserve(container.size());
+
+		upsert_context ctx;
+		ctx.size         = seq_view.size();
+		ctx.nvisible_ptr = &m_nvisible;
+		ctx.container    = &container;
+		ctx.index_array  = &index_array;
+		ctx.vptr_array   = &vptr_array;
+
+		auto & removed_first = ctx.removed_first = affected_indexes.end();
+		auto & removed_last  = ctx.removed_last  = affected_indexes.end();
+
+		auto & changed_first = ctx.changed_first = affected_indexes.begin();
+		auto & changed_last  = ctx.changed_last  = affected_indexes.begin();
+
+		auto key_extractor = code_view.key_extractor();
+
+		while (first != last)
+		{
+			auto cur = first++;
+			auto pos = cur - seq_view.begin();
+			*changed_last++ = pos;
+
+			auto oldsize = code_view.size();
+			auto rollback = [key_extractor, key = key_extractor(*cur)](auto & item) { key_extractor(item) = std::move(key); };
+			bool result = container.modify(cur, modifier, std::move(rollback));
+			assert(oldsize == code_view.size());
+		}
+
+		rearrange_and_notify(ctx);
+	}
+
+	template <class ... Types>
+	template <class SinglePassIterator, class Modifier>
+	void sfset_model_qtbase<Types...>::rename(SinglePassIterator first, SinglePassIterator last, Modifier modifier)
+	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>);
+
+		if (first == last) return;
+
+		auto & container = m_store;
+		auto & seq_view  = container.template get<by_seq>();
+		auto & code_view = container.template get<by_code>();
+
+		value_ptr_vector vptr_array;
+		int_vector index_array, affected_indexes;
+		affected_indexes.resize(container.size());
+		vptr_array.reserve(container.size());
+
+		upsert_context ctx;
+		ctx.size         = seq_view.size();
+		ctx.nvisible_ptr = &m_nvisible;
+		ctx.container    = &container;
+		ctx.index_array  = &index_array;
+		ctx.vptr_array   = &vptr_array;
+
+		auto & removed_first = ctx.removed_first = affected_indexes.end();
+		auto & removed_last  = ctx.removed_last  = affected_indexes.end();
+
+		auto & changed_first = ctx.changed_first = affected_indexes.begin();
+		auto & changed_last  = ctx.changed_last  = affected_indexes.begin();
+
+		auto key_extractor = code_view.key_extractor();
+
+		for (; first != last; ++first)
+		{
+			auto && key = *first;
+			auto found_it = code_view.find(std::forward<decltype(key)>(key));
+			if (found_it == code_view.end())
+				continue;
+
+			auto pos = container.template project<by_seq>(found_it) - seq_view.begin();
+			*changed_last++ = pos;
+
+			auto oldsize = code_view.size();
+			auto rollback = [key_extractor, key](auto & item) { key_extractor(item) = key; };
+			code_view.modify(found_it, modifier, std::move(rollback));
+			assert(oldsize == code_view.size());
+		}
+
+		rearrange_and_notify(ctx);
 	}
 
 	template <class ... Types>
@@ -1032,7 +1221,7 @@ namespace viewed
 	template <class ... Types>
 	template <class CompatibleKey>
 	auto sfset_model_qtbase<Types...>::erase(const CompatibleKey & key) -> size_type
-	{		
+	{
 		auto & container = m_store;
 		auto & code_view = container.template get<by_code>();
 		auto & seq_view  = container.template get<by_seq>();
@@ -1054,9 +1243,10 @@ namespace viewed
 
 	template <class ... Types>
 	template <class SinglePassIterator>
-	auto sfset_model_qtbase<Types...>::erase(SinglePassIterator first, SinglePassIterator last) ->
-		std::enable_if_t<std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>, size_type>
+	auto sfset_model_qtbase<Types...>::erase(SinglePassIterator first, SinglePassIterator last) -> size_type
 	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>);
+
 		if (first == last) return 0;
 
 		auto & container = m_store;
@@ -1066,7 +1256,7 @@ namespace viewed
 
 		value_ptr_vector vptr_array;
 		int_vector index_array, affected_indexes;
-		affected_indexes.resize(m_store.size());
+		affected_indexes.resize(container.size());
 		vptr_array.reserve(container.size());
 
 		upsert_context ctx;
@@ -1097,6 +1287,16 @@ namespace viewed
 		auto removed = removed_last - removed_first;
 		rearrange_and_notify(ctx);
 		return removed;
+	}
+
+	template <class ... Types>
+	void sfset_model_qtbase<Types...>::clear()
+	{
+		auto * model = get_model();
+		model->beginResetModel();
+		m_store.clear();
+		m_nvisible = 0;
+		model->endResetModel();
 	}
 
 } // namespace viewed

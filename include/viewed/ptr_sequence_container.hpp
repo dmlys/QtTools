@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <iterator> // for back_inserter
 #include <boost/iterator/iterator_adaptor.hpp>
+#include <boost/iterator/transform_iterator.hpp>
 
 #include <viewed/signal_traits.hpp>
 #include <ext/try_reserve.hpp>
@@ -124,7 +125,7 @@ namespace viewed
 	/// Iterators are read-only. use assign/append/erase to add/remove data
 	/// 
 	/// Emits signals when elements added or erased
-	/// Can be used to build views on this container, see viewed::view_base	
+	/// Can be used to build views on this container, see viewed::view_base
 	/// NOTE: Those views will be ptr views to: value_type, reference will be const pointers
 	/// 
 	/// @Param Element type
@@ -254,23 +255,29 @@ namespace viewed
 		template <class... Args> connection on_clear(Args && ... args)  { return m_clear_signal.connect(std::forward<Args>(args)...); }
 
 	protected:
-		/// appends elements from [first; last) into internal store and notifies views
-		template <class SinglePassIterator>
-		void append_newrecs(SinglePassIterator first, SinglePassIterator last);
-
-		/// assigns elements from [first; last) into internal store and notifies views
-		template <class SinglePassIterator>
-		void assign_newrecs(SinglePassIterator first, SinglePassIterator last);
-
-		/// erases elements [first, last) from internal stores and notifies views
-		void erase_from_views(const_iterator first, const_iterator last);
-
 		/// notifies views about update
 		void notify_views(signal_store_type & erased, signal_store_type & updated, signal_store_type & inserted);
 
 	public:
-		/// erases all elements
-		void clear();
+		/// clear container and assigns elements from [first, last)
+		template <class SinglePassIterator>
+		void assign(SinglePassIterator first, SinglePassIterator last);
+
+		template <class SinglePassIterator>
+		iterator insert(const_iterator where, SinglePassIterator first, SinglePassIterator last);
+
+		/// appends new record from [first, last)
+		template <class SinglePassIterator>
+		void append(SinglePassIterator first, SinglePassIterator last) { insert(end(), first, last); }
+
+		template <class Modifier>
+		void modify(const_iterator first, const_iterator last, Modifier modifier);
+
+
+		template <class Arg> void append(Arg && arg)    { append(&arg, std::next(&arg)); }
+		template <class Arg> void push_back(Arg && arg) { return append(std::forward<Arg>(arg)); }
+
+		template <class Arg> iterator insert(const_iterator where, Arg && arg) { return insert(where, &arg, std::next(&arg)); }
 
 		/// erases elements [first, last)
 		/// [first, last) must be a valid range
@@ -278,29 +285,8 @@ namespace viewed
 		/// erase element pointed by it
 		const_iterator erase(const_iterator it) { return erase(it, std::next(it)); }
 
-		/// appends new record from [first, last)
-		template <class SinglePassIterator>
-		auto append(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
-
-		/// clear container and assigns elements from [first, last)
-		template <class SinglePassIterator>
-		auto assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
-
-
-		template <class Range>
-		auto assign(Range && range) -> std::enable_if_t<ext::is_range_v<Range>>
-		{ using std::begin; using std::end; assign(begin(range), end(range)); }
-
-		template <class SinglePassRange>
-		auto append(SinglePassRange && range) -> std::enable_if_t<std::is_convertible_v<ext::range_value_t<SinglePassRange>, value_type>>
-		{ return append(boost::begin(range), boost::end(range)); }
-
-		template <class SinglePassRange>
-		auto assign(SinglePassRange && range) -> std::enable_if_t<std::is_convertible_v<ext::range_value_t<SinglePassRange>, value_type>>
-		{ return assign(boost::begin(range), boost::end(range)); }
-
-		template <class Arg> auto append(Arg && arg) -> std::enable_if_t<std::is_convertible_v<Arg, value_type>> { append(&arg, &arg + 1); }
-		template <class Arg> void push_back(Arg && arg) { return append(std::forward<Arg>(arg)); }
+		/// erases all elements
+		void clear();
 
 	public:
 		ptr_sequence_container(traits_type traits = {})
@@ -317,27 +303,22 @@ namespace viewed
 
 
 	template <class Type, class Traits, class SignalTraits>
-	template <class SinglePassIterator>
-	void ptr_sequence_container<Type, Traits, SignalTraits>::append_newrecs
-		(SinglePassIterator first, SinglePassIterator last)
+	void ptr_sequence_container<Type, Traits, SignalTraits>::notify_views
+		(signal_store_type & erased, signal_store_type & updated, signal_store_type & inserted)
 	{
-		signal_store_type erased, updated, inserted;
-		ext::try_reserve(inserted, first, last);
-
-		for (; first != last; ++first)
-		{
-			m_store.push_back(self_type::make_internal(std::move(*first)));
-			inserted.push_back(get_pointer(m_store.back()));
-		}
-
-		notify_views(erased, updated, inserted);
+		auto urr = signal_traits::make_range(updated.data(), updated.data() + updated.size());
+		auto irr = signal_traits::make_range(inserted.data(), inserted.data() + inserted.size());
+		auto err = signal_traits::make_range(erased.data(), erased.data() + erased.size());
+		m_update_signal(err, urr, irr);
 	}
 
 	template <class Type, class Traits, class SignalTraits>
 	template <class SinglePassIterator>
-	void ptr_sequence_container<Type, Traits, SignalTraits>::assign_newrecs
+	void ptr_sequence_container<Type, Traits, SignalTraits>::assign
 		(SinglePassIterator first, SinglePassIterator last)
 	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, value_type>);
+
 		signal_store_type erased, updated, inserted;
 		ext::try_reserve(inserted, first, last);
 
@@ -358,13 +339,59 @@ namespace viewed
 	}
 
 	template <class Type, class Traits, class SignalTraits>
-	void ptr_sequence_container<Type, Traits, SignalTraits>::erase_from_views(const_iterator first, const_iterator last)
+	template <class SinglePassIterator>
+	auto ptr_sequence_container<Type, Traits, SignalTraits>::insert
+		(const_iterator where, SinglePassIterator first, SinglePassIterator last) -> iterator
+	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, value_type>);
+
+		signal_store_type erased, updated, inserted;
+
+		auto make_internal = [](auto && val) { return self_type::make_internal(std::forward<decltype(val)>(val)); };
+
+		auto oldsize = m_store.size();
+		auto result = m_store.insert(where.base(), boost::make_transform_iterator(first, make_internal), boost::make_transform_iterator(last, make_internal));
+		auto inserted_count = m_store.size() - oldsize;
+
+		inserted.resize(inserted_count);
+		std::transform(result, result + inserted_count, inserted.begin(), get_pointer);
+
+		notify_views(erased, updated, inserted);
+		return iterator(result);
+	}
+
+	template <class Type, class Traits, class SignalTraits>
+	template <class Modifier>
+	void ptr_sequence_container<Type, Traits, SignalTraits>::modify
+		(const_iterator first, const_iterator last, Modifier modifier)
+	{
+		signal_store_type erased, updated, inserted;
+
+		iterator mfirst = m_store.begin();
+		iterator mlast = m_store.begin();
+
+		mfirst = first + (first - mfirst);
+		mlast  = first + (last  - mfirst);
+
+		for (auto it = mfirst; it != mlast; ++it)
+			modifier(get_reference(*it));
+
+		updated.resize(last - first);
+		std::transform(first, last, updated.begin(), get_pointer);
+
+		notify_views(erased, updated, inserted);
+	}
+
+	template <class Type, class Traits, class SignalTraits>
+	auto ptr_sequence_container<Type, Traits, SignalTraits>::erase(const_iterator first, const_iterator last) -> const_iterator
 	{
 		signal_store_type todel;
 		std::transform(first, last, std::back_inserter(todel), get_pointer);
 
 		auto rawRange = signal_traits::make_range(todel.data(), todel.data() + todel.size());
 		m_erase_signal(rawRange);
+
+		return m_store.erase(first, last);
 	}
 
 	template <class Type, class Traits, class SignalTraits>
@@ -374,35 +401,4 @@ namespace viewed
 		m_store.clear();
 	}
 
-	template <class Type, class Traits, class SignalTraits>
-	void ptr_sequence_container<Type, Traits, SignalTraits>::notify_views
-		(signal_store_type & erased, signal_store_type & updated, signal_store_type & inserted)
-	{
-		auto urr = signal_traits::make_range(updated.data(), updated.data() + updated.size());
-		auto irr = signal_traits::make_range(inserted.data(), inserted.data() + inserted.size());
-		auto err = signal_traits::make_range(erased.data(), erased.data() + erased.size());
-		m_update_signal(err, urr, irr);
-	}
-
-
-	template <class Type, class Traits, class SignalTraits>
-	auto ptr_sequence_container<Type, Traits, SignalTraits>::erase(const_iterator first, const_iterator last) -> const_iterator
-	{
-		erase_from_views(first, last);
-		return m_store.erase(first, last);
-	}
-
-	template <class Type, class Traits, class SignalTraits>
-	template <class SinglePassIterator>
-	inline auto ptr_sequence_container<Type, Traits, SignalTraits>::append(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
-	{
-		return append_newrecs(first, last);
-	}
-
-	template <class Type, class Traits, class SignalTraits>
-	template <class SinglePassIterator>
-	inline auto ptr_sequence_container<Type, Traits, SignalTraits>::assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
-	{
-		return assign_newrecs(first, last);
-	}
 }

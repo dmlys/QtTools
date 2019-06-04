@@ -33,7 +33,7 @@ namespace viewed
 	/************************************************************************/
 	template <class Type>
 	struct pointer_variant_size; /* undefined */
-		
+	
 	template <class Type> struct pointer_variant_size<         const Type> : pointer_variant<Type>::type {};
 	template <class Type> struct pointer_variant_size<      volatile Type> : pointer_variant<Type>::type {};
 	template <class Type> struct pointer_variant_size<const volatile Type> : pointer_variant<Type>::type {};
@@ -192,7 +192,7 @@ namespace viewed
 			"only pointer types allowed");
 
 	private:
-		union 
+		union
 		{
 			struct
 			{
@@ -327,7 +327,7 @@ namespace viewed
 
 	template <class ... PointerTypes>
 	template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> /*= 0*/>
-	inline auto pointer_variant<PointerTypes...>::operator =(Type * ptr) noexcept -> pointer_variant &	
+	inline auto pointer_variant<PointerTypes...>::operator =(Type * ptr) noexcept -> pointer_variant &
 	{
 		using result_type = std::invoke_result_t<pointer_variant_detail::overload_set<PointerTypes...>, Type *>;
 		constexpr auto idx = pointer_variant_detail::find_v<self_type, result_type>;
@@ -344,7 +344,7 @@ namespace viewed
 
 	template <class ... PointerTypes>
 	template <class Type, std::enable_if_t<pointer_variant_detail::invokable_v<pointer_variant<PointerTypes...>, Type *>, int> /*= 0*/>
-	inline auto pointer_variant<PointerTypes...>::operator =(std::unique_ptr<Type> ptr) noexcept -> pointer_variant &	
+	inline auto pointer_variant<PointerTypes...>::operator =(std::unique_ptr<Type> ptr) noexcept -> pointer_variant &
 	{
 		m_owning = 1;
 		return operator =(ptr.release());
@@ -363,7 +363,7 @@ namespace viewed
 		other.m_val = 0;
 	}
 
-	template <class ... PointerTypes>	
+	template <class ... PointerTypes>
 	inline pointer_variant<PointerTypes...>::pointer_variant() noexcept
 	{
 		m_val = 0;
@@ -383,7 +383,7 @@ namespace viewed
 	}
 
 	template <class ... PointerTypes>
-	inline pointer_variant<PointerTypes...>::pointer_variant(pointer_variant && op) noexcept	
+	inline pointer_variant<PointerTypes...>::pointer_variant(pointer_variant && op) noexcept
 	{
 		m_val = std::exchange(op.m_val, 0);
 	}

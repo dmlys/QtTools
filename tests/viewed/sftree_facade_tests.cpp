@@ -110,6 +110,9 @@ namespace
 		template <class ... Args> static void assign(model_type & model, Args && ... args) { model.assign(std::forward<Args>(args)...); }
 		template <class ... Args> static void upsert(model_type & model, Args && ... args) { model.upsert(std::forward<Args>(args)...); }
 
+		template <class Type> static void assign(model_type & model, std::initializer_list<Type> data) { assign(model, data.begin(), data.end()); }
+		template <class Type> static void upsert(model_type & model, std::initializer_list<Type> data) { upsert(model, data.begin(), data.end()); }
+
 		template <class NewSorter> using rebind_sorter = tree_model<NewSorter, Filter>;
 		template <class NewFilter> using rebind_filter = tree_model<Sorter, NewFilter>;
 		template <class NewSorter, class NewFilter> using rebind = tree_model<NewSorter, NewFilter>;
@@ -140,6 +143,9 @@ namespace
 			const auto & container = model.get_owner();
 			container->upsert(std::forward<Args>(args)...);
 		}
+
+		template <class Type> static void assign(model_type & model, std::initializer_list<Type> data) { assign(model, data.begin(), data.end()); }
+		template <class Type> static void upsert(model_type & model, std::initializer_list<Type> data) { upsert(model, data.begin(), data.end()); }
 
 		template <class NewSorter> using rebind_sorter = tree_view_model<NewSorter, Filter>;
 		template <class NewFilter> using rebind_filter = tree_view_model<Sorter, NewFilter>;
@@ -401,7 +407,7 @@ BOOST_AUTO_TEST_CASE(model_view_reset)
 	auto container = std::make_shared<container_type>();
 	tree_view_model<std::variant<less_sorter, greater_sorter>, filter> model(container);
 
-	container->assign(data);
+	container->assign(data.begin(), data.end());
 	BOOST_CHECK_EQUAL(model.rowCount(), 1);
 
 	model.reinit_view_and_notify();

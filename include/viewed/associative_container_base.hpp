@@ -6,6 +6,7 @@
 
 #include <ext/try_reserve.hpp>
 #include <ext/type_traits.hpp>
+#include <ext/utility.hpp>
 #include <ext/range/range_traits.hpp>
 
 namespace viewed
@@ -35,17 +36,23 @@ namespace viewed
 		//////////////////////////////////////////////////////////////////////////
 		/// function interface can be static function members or static functor members.
 
+		/// extracts key_extractor from store_type
+		static key_extractor_type key_extractor(const main_store_type & store) { return store.key_extractor(); }
 		/// constructs main_store_type with provided arguments
 		static main_store_type make_store(... main_store_ctor_args);
+
+		/// modifies element pointed by it in store via modifier, if renaming is not possibly - restores element via rollback
+		template <class Modifier, class Rollback>
+		static void rename(main_store_type & store, typename main_store_type::const_iterator it, Modifier & modifier, Rollback && rollback)
+		{ store.modify(it, modifier, std::forward<Rollback>(rollback));	}
 
 		/// obtains pointer from internal_value_type (from main_store_type)
 		static const_pointer   value_pointer(const internal_value_type & val)   { return val.get(); }
 		static       pointer   value_pointer(      internal_value_type & val)   { return val.get(); }
 
-		/// update takes current internal_value_type rvalue as first argument and some generic type as second.
-		/// It updates current value with new data, usually second type is some reference of value_type
-		static void update(internal_value_type & val, const value_type &  newval);
-		static void update(internal_value_type & val,       value_type && newval);
+		/// obtains reference from internal_value_type (from main_store_type)
+		static decltype(auto) value_reference(const value_type & val) { return *val; }
+		static decltype(auto) value_reference(      value_type & val) { return *val; }
 	};
 	*/
 
@@ -146,6 +153,7 @@ namespace viewed
 
 	public:
 		//container interface
+		using key_type        = typename main_store_type::key_type;
 		using value_type      = typename traits_type::value_type;
 		using const_reference = const value_type &;
 		using const_pointer   = const value_type *;
@@ -193,6 +201,10 @@ namespace viewed
 		template <class CompatibleKey>
 		const_iterator count(const CompatibleKey & key) const { return m_store.count(key); }
 
+		template <class CompatibleKey>
+		std::pair<const_iterator, const_iterator> equal_range(const CompatibleKey & key) const
+		{ return m_store.equal_range(key); }
+
 		size_type size() const noexcept { return m_store.size(); }
 		bool empty()     const noexcept { return m_store.empty(); }
 
@@ -202,23 +214,58 @@ namespace viewed
 		template <class... Args> connection on_clear(Args && ... args)  { return m_clear_signal.connect(std::forward<Args>(args)...); }
 
 	protected:
-		/// finds and updates or appends elements from [first; last) into internal store m_store
-		/// those elements also placed into upserted_recs for further notifications of views
-		template <class SinglePassIterator>
-		void upsert_newrecs(SinglePassIterator first, SinglePassIterator last);
-
-		template <class SinglePassIterator>
-		void assign_newrecs(SinglePassIterator first, SinglePassIterator last);
-
-		/// erases elements [first, last) from attached views
-		void erase_from_views(const_iterator first, const_iterator last);
-
 		/// notifies views about update
 		void notify_views(signal_store_type & erased, signal_store_type & updated, signal_store_type & inserted);
 
 	public:
-		/// erases all elements
-		void clear();
+		/// clear container and assigns elements from [first, last)
+		template <class SinglePassIterator>
+		void assign(SinglePassIterator first, SinglePassIterator last) { return assign(first, last, viewed::default_assigner); }
+		/// clear container and assigns elements from [first, last)
+		/// updater - functor used to assign records: updater(existing_record, *curit);
+		template <class SinglePassIterator, class Updater>
+		void assign(SinglePassIterator first, SinglePassIterator last, Updater updater);
+
+		/// upserts new record from [first, last)
+		/// records which are already in container will be replaced with new ones
+		template <class SinglePassIterator>
+		void upsert(SinglePassIterator first, SinglePassIterator last) { return upsert(first, last, viewed::default_assigner); }
+		/// upserts new record from [first, last)
+		/// records which are already in container will be replaced with new ones
+		/// updater - functor used to update records: updater(oldrec, *curit);
+		template <class SinglePassIterator, class Updater>
+		void upsert(SinglePassIterator first, SinglePassIterator last, Updater updater);
+
+		/// modifies elements from [first; last) via given modifier
+		template <class Modifier>
+		void modify(const_iterator first, const_iterator last, Modifier modifier);
+		/// modifies element pointed by it via given modifier
+		template <class Modifier>
+		void modify(const_iterator it, Modifier modifier) { return modify(it, std::next(it), std::move(modifier)); }
+		/// modifies elements specified by keys from [first; last) via given modifier
+		template <class SinglePassIterator, class Modifier>
+		void modify(SinglePassIterator first, SinglePassIterator last, Modifier modifier);
+		/// modifies element specified by key via given modifier
+		template <class CompatibleKey, class Modifier>
+		void modify(const CompatibleKey & key, Modifier modifier) { return modify(&key, std::next(&key), std::move(modifier)); }
+
+		/// renames/modifies elements from [first; last) via given modifier
+		/// if new name clashes with already present - element is removed(same as boost::multi_index)
+		template <class Modifier>
+		void rename(const_iterator first, const_iterator last, Modifier modifier);
+		/// renames/modifies element pointed by it via given modifier
+		/// if new name clashes with already present - element is removed(same as boost::multi_index)
+		template <class Modifier>
+		void rename(const_iterator it, Modifier modifier) { return rename(it, std::next(it), std::move(modifier)); }
+		/// renames/modifies elements specified by keys from [first; last) via given modifier
+		/// if new name clashes with already present - element is removed(same as boost::multi_index)
+		template <class SinglePassIterator, class Modifier>
+		void rename(SinglePassIterator first, SinglePassIterator last, Modifier modifier);
+		/// renames/modifies element specified by key via given modifier
+		/// if new name clashes with already present - element is removed(same as boost::multi_index)
+		template <class CompatibleKey, class Modifier>
+		void rename(const CompatibleKey & key, Modifier modifier) { return rename(&key, std::next(&key), std::move(modifier)); }
+
 		/// erases elements [first, last) from internal store and views
 		/// [first, last) must be a valid range
 		const_iterator erase(const_iterator first, const_iterator last);
@@ -226,26 +273,13 @@ namespace viewed
 		const_iterator erase(const_iterator it) { return erase(it, std::next(it)); }
 		/// erase element by key
 		template <class CompatibleKey>
-		size_type erase(const CompatibleKey & key);
-
-		/// upserts new record from [first, last)
-		/// records which are already in container will be replaced with new ones
+		size_type erase(const CompatibleKey & key) { return erase(&key, std::next(&key)); }
+		/// erases elements specified by keys from [first; last)
 		template <class SinglePassIterator>
-		auto upsert(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
-		{ return upsert_newrecs(first, last); }
+		size_type erase(SinglePassIterator first, SinglePassIterator last);
 
-		template <class SinglePassRange>
-		auto upsert(SinglePassRange && range) -> std::enable_if_t<ext::is_range_v<SinglePassRange>>
-		{ return upsert(boost::begin(range), boost::end(range)); }
-
-		/// clear container and assigns elements from [first, last)
-		template <class SinglePassIterator>
-		auto assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
-		{ return assign_newrecs(first, last); }
-
-		template <class SinglePassRange>
-		auto assign(SinglePassRange && range) -> std::enable_if_t<ext::is_range_v<SinglePassRange>>
-		{ return assign(boost::begin(range), boost::end(range)); }
+		/// erases all elements
+		void clear();
 
 	protected:
 		associative_container_base(traits_type traits = {})
@@ -265,43 +299,52 @@ namespace viewed
 		associative_container_base & operator =(associative_container_base && op) = default;
 	};
 
+
+
+
+
 	template <class Traits, class SignalTraits>
-	template <class SinglePassIterator>
-	void associative_container_base<Traits, SignalTraits>::upsert_newrecs
-		(SinglePassIterator first, SinglePassIterator last)
+	void associative_container_base<Traits, SignalTraits>::notify_views
+		(signal_store_type & erased, signal_store_type & updated, signal_store_type & inserted)
 	{
-		signal_store_type erased, updated, inserted;
-		ext::try_reserve(updated, first, last);
-		ext::try_reserve(inserted, first, last);
+		auto inserted_first = inserted.data();
+		auto inserted_last  = inserted_first + inserted.size();
+		auto updated_first  = updated.data();
+		auto updated_last   = updated_first + updated.size();
 
-		for (; first != last; ++first)
+		// both assign_newrecs and upsert_newrecs can produce duplicates:
+		// * several updates
+		// * insert + update
+		// we must sanitize this, views expect that element is either inserted, updated or erased
+		//   insert + followed update(s) -> just insert
+		//   update + followed update(s) -> update
+		//   there are will no be erased duplicates
+
+		std::sort(updated_first, updated_last);
+		updated_last = std::unique(updated_first, updated_last);
+
+		for (auto it = inserted_first; it != inserted_last; ++it)
 		{
-			auto && val = *first;
-
-			typename main_store_type::const_iterator where;
-			bool inserted_into_store;
-			std::tie(where, inserted_into_store) = m_store.insert(std::forward<decltype(val)>(val));
-
-			auto * ptr = get_pointer(*where);
-			if (inserted_into_store)
-			{
-				inserted.push_back(ptr);
-			}
-			else
-			{
-				traits_type::update(const_cast<value_type &>(*where), std::forward<decltype(val)>(val));
-				updated.push_back(ptr);
-			}
+			auto ptr = *it;
+			auto found_it = std::lower_bound(updated_first, updated_last, ptr);
+			if (found_it != updated_last and ptr == *found_it) *found_it = viewed::mark_pointer(ptr);
 		}
 
-		notify_views(erased, updated, inserted);
+		updated_last = std::remove_if(updated_first, updated_last, viewed::marked_pointer);
+
+		auto urr = signal_traits::make_range(updated_first, updated_last);
+		auto irr = signal_traits::make_range(inserted_first, inserted_last);
+		auto err = signal_traits::make_range(erased.data(), erased.data() + erased.size());
+		m_update_signal(err, urr, irr);
 	}
 
 	template <class Traits, class SignalTraits>
-	template <class SinglePassIterator>
-	void associative_container_base<Traits, SignalTraits>::assign_newrecs
-		(SinglePassIterator first, SinglePassIterator last)
+	template <class SinglePassIterator, class Updater>
+	void associative_container_base<Traits, SignalTraits>::assign
+		(SinglePassIterator first, SinglePassIterator last, Updater updater)
 	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, value_type>);
+
 		signal_store_type erased, updated, inserted;
 		ext::try_reserve(updated, first, last);
 		ext::try_reserve(inserted, first, last);
@@ -322,13 +365,14 @@ namespace viewed
 			std::tie(where, inserted_into_store) = m_store.insert(std::forward<decltype(val)>(val));
 
 			auto * ptr = get_pointer(*where);
+			auto & ref = get_reference(*where);
 			if (inserted_into_store)
 			{
 				inserted.push_back(ptr);
 			}
 			else
 			{
-				traits_type::update(const_cast<value_type &>(*where), std::forward<decltype(val)>(val));
+				updater(ext::unconst(ref), std::forward<decltype(val)>(val));
 				updated.push_back(ptr);
 
 				// mark found item in erase list
@@ -341,18 +385,188 @@ namespace viewed
 		erased.erase(erased_last, erased.end());
 		notify_views(erased, updated, inserted);
 
-		auto key_extractor = m_store.key_extractor();
+		auto key_extractor = traits_type::key_extractor(m_store);
 		for (auto * ptr : erased) m_store.erase(key_extractor(*ptr));
 	}
 
+
 	template <class Traits, class SignalTraits>
-	void associative_container_base<Traits, SignalTraits>::erase_from_views(const_iterator first, const_iterator last)
+	template <class SinglePassIterator, class Updater>
+	void associative_container_base<Traits, SignalTraits>::upsert
+		(SinglePassIterator first, SinglePassIterator last, Updater updater)
+	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, value_type>);
+
+		signal_store_type erased, updated, inserted;
+		ext::try_reserve(updated, first, last);
+		ext::try_reserve(inserted, first, last);
+
+		for (; first != last; ++first)
+		{
+			auto && val = *first;
+
+			typename main_store_type::const_iterator where;
+			bool inserted_into_store;
+			std::tie(where, inserted_into_store) = m_store.insert(std::forward<decltype(val)>(val));
+
+			auto * ptr = get_pointer(*where);
+			auto & ref = get_reference(*where);
+			if (inserted_into_store)
+			{
+				inserted.push_back(ptr);
+			}
+			else
+			{
+				updater(ext::unconst(ref), std::forward<decltype(val)>(val));
+				updated.push_back(ptr);
+			}
+		}
+
+		notify_views(erased, updated, inserted);
+	}
+
+	template <class Traits, class SignalTraits>
+	template <class Modifier>
+	void associative_container_base<Traits, SignalTraits>::modify
+		(const_iterator first, const_iterator last, Modifier modifier)
+	{
+		signal_store_type erased, updated, inserted;
+		ext::try_reserve(updated, first, last);
+
+		for (; first != last; ++first)
+		{
+			auto * ptr = get_pointer(*first);
+			auto & ref = get_reference(*first);
+
+			modifier(ext::unconst(ref));
+			updated.push_back(ptr);
+		}
+
+		notify_views(erased, updated, inserted);
+	}
+
+	template <class Traits, class SignalTraits>
+	template <class SinglePassIterator, class Modifier>
+	void associative_container_base<Traits, SignalTraits>::modify
+		(SinglePassIterator first, SinglePassIterator last, Modifier modifier)
+	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>);
+
+		signal_store_type erased, updated, inserted;
+		ext::try_reserve(updated, first, last);
+
+		for (; first != last; ++first)
+		{
+			auto && key = *first;
+
+			auto found_it = m_store.find(key);
+			if (found_it == m_store.end())
+				continue;
+
+			auto * ptr = get_pointer(*found_it);
+			auto & ref = get_reference(*found_it);
+
+			modifier(ext::unconst(ref));
+			updated.push_back(ptr);
+		}
+
+		notify_views(erased, updated, inserted);
+	}
+
+	template <class Traits, class SignalTraits>
+	template <class Modifier>
+	void associative_container_base<Traits, SignalTraits>::rename
+		(const_iterator first, const_iterator last, Modifier modifier)
+	{
+		signal_store_type erased, updated, inserted;
+		ext::try_reserve(updated, first, last);
+
+		auto key_extractor = traits_type::key_extractor(m_store);
+
+		for (; first != last; ++first)
+		{
+			auto * ptr = get_pointer(*first);
+			updated.push_back(ptr);
+
+			auto rollback = [key_extractor, key = key_extractor(*first)](auto & item) { key_extractor(item) = key; };
+			traits_type::rename(m_store, first, modifier, std::move(rollback));
+		}
+
+		notify_views(erased, updated, inserted);
+	}
+
+	template <class Traits, class SignalTraits>
+	template <class SinglePassIterator, class Modifier>
+	void associative_container_base<Traits, SignalTraits>::rename
+		(SinglePassIterator first, SinglePassIterator last, Modifier modifier)
+	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>);
+
+		signal_store_type erased, updated, inserted;
+		ext::try_reserve(updated, first, last);
+
+		auto key_extractor = traits_type::key_extractor(m_store);
+
+		for (; first != last; ++first)
+		{
+			auto && key = *first;
+
+			auto found_it = m_store.find(key);
+			if (found_it == m_store.end())
+				continue;
+
+			auto * ptr = get_pointer(*found_it);
+			updated.push_back(ptr);
+
+			auto rollback = [key_extractor, key](auto & item) { key_extractor(item) = key; };
+			traits_type::rename(m_store, found_it, modifier, std::move(rollback));
+		}
+
+		notify_views(erased, updated, inserted);
+	}
+
+
+	template <class Traits, class SignalTraits>
+	auto associative_container_base<Traits, SignalTraits>::erase(const_iterator first, const_iterator last) -> const_iterator
 	{
 		signal_store_type todel;
 		std::transform(first, last, std::back_inserter(todel), get_pointer);
 
 		auto rawRange = signal_traits::make_range(todel.data(), todel.data() + todel.size());
 		m_erase_signal(rawRange);
+
+		return m_store.erase(first, last);
+	}
+
+	template <class Traits, class SignalTraits>
+	template <class SinglePassIterator>
+	auto associative_container_base<Traits, SignalTraits>::erase(SinglePassIterator first, SinglePassIterator last) -> size_type
+	{
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, key_type>);
+
+		using iterator_pair = std::pair<const_iterator, const_iterator>;
+		std::vector<iterator_pair> erased_pairs;
+		signal_store_type todel;
+
+		ext::try_reserve(erased_pairs, first, last);
+
+		for (; first != last; ++first)
+		{
+			auto && key = *first;
+
+			const_iterator ifirst, ilast;
+			std::tie(ifirst, ilast) = m_store.equal_range(key);
+			std::transform(ifirst, ilast, std::back_inserter(todel), get_pointer);
+			erased_pairs.push_back(std::make_pair(ifirst, ilast));
+		}
+
+		auto rawRange = signal_traits::make_range(todel.data(), todel.data() + todel.size());
+		m_erase_signal(rawRange);
+
+		for (auto & [first, last] : erased_pairs)
+			m_store.erase(first, last);
+
+		return todel.size();
 	}
 
 	template <class Traits, class SignalTraits>
@@ -360,59 +574,5 @@ namespace viewed
 	{
 		m_clear_signal();
 		m_store.clear();
-	}
-
-	template <class Traits, class SignalTraits>
-	void associative_container_base<Traits, SignalTraits>::notify_views
-		(signal_store_type & erased, signal_store_type & updated, signal_store_type & inserted)
-	{
-		auto inserted_first = inserted.data();
-		auto inserted_last  = inserted_first + inserted.size();
-		auto updated_first  = updated.data();
-		auto updated_last   = updated_first + updated.size();
-
-		// both assign_newrecs and upsert_newrecs can produce duplicates:
-		// * several updates
-		// * insert + update
-		// we must sanitize this, views expect that element is either inserted, updated or erased
-		// insert + followed update(s) -> just insert
-		// update + followed update(s) -> update
-		// there are will no erased duplicates
-
-		std::sort(updated_first, updated_last);
-		updated_last = std::unique(updated_first, updated_last);
-
-		for (auto it = inserted_first; it != inserted_last; ++it)
-		{
-			auto ptr = *it;
-			auto found_it = std::lower_bound(updated_first, updated_last, ptr);
-			if (found_it != updated_last and ptr == *found_it) *found_it = viewed::mark_pointer(ptr);
-		}
-
-		updated_last = std::remove_if(updated_first, updated_last, viewed::marked_pointer);
-
-		auto urr = signal_traits::make_range(updated_first, updated_last);
-		auto irr = signal_traits::make_range(inserted_first, inserted_last);
-		auto err = signal_traits::make_range(erased.data(), erased.data() + erased.size());
-		m_update_signal(err, urr, irr);
-	}
-
-
-	template <class Traits, class SignalTraits>
-	auto associative_container_base<Traits, SignalTraits>::erase(const_iterator first, const_iterator last) -> const_iterator
-	{
-		erase_from_views(first, last);
-		return m_store.erase(first, last);
-	}
-
-	template <class Traits, class SignalTraits>
-	template <class CompatibleKey>
-	auto associative_container_base<Traits, SignalTraits>::erase(const CompatibleKey & key) -> size_type
-	{
-		const_iterator first, last;
-		std::tie(first, last) = m_store.equal_range(key);
-		auto count = std::distance(first, last);
-		erase(first, last);
-		return count;
 	}
 }

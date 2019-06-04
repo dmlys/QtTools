@@ -121,6 +121,16 @@ namespace viewed
 	constexpr toggle_index_mark_type toggle_index_mark {};
 
 
+
+	struct default_assigner_type
+	{
+		template <class Type1, class Type2>
+		void operator()(Type1 & val, Type2 && newval) const { val = std::forward<Type2>(newval); }
+	};
+
+	constexpr default_assigner_type default_assigner {};
+
+
 	/// inverses index array in following way:
 	/// inverse[arr[i] - offset] = i for first..last.
 	/// This is for when you have array of arr[new_index] => old_index,

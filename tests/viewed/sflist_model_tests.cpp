@@ -44,6 +44,25 @@ namespace
 			return viewed::refilter_type::full;
 		}
 	};
+
+	template <class Model, class Type>
+	inline static auto assign(Model & model, std::initializer_list<Type> ilist)
+	{
+		return model.assign(ilist.begin(), ilist.end());
+	}
+
+	template <class Model, class Type>
+	inline static auto upsert(Model & model, std::initializer_list<Type> ilist)
+	{
+		return model.upsert(ilist.begin(), ilist.end());
+	}
+
+	template <class Model, class Type>
+	inline static auto append(Model & model, std::initializer_list<Type> ilist)
+	{
+		return model.append(ilist.begin(), ilist.end());
+	}
+
 } // 'anonymous' namespace
 
 
@@ -56,13 +75,13 @@ BOOST_AUTO_TEST_CASE(simple_tests)
 	auto assign_data = {15, 10, 1, 25, 100, 256};
 	auto append_data = {15, 10, 900, -200, -100, 0};
 
-	model.assign(assign_data);
+	assign(model, assign_data);
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), 1);
 
 	QPersistentModelIndex idx1 = model.index(0);
 	BOOST_CHECK(idx1.isValid() and idx1.row() == 0);
 
-	model.append(append_data);
+	append(model, append_data);
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), -200);
 
 	QPersistentModelIndex idx2 = model.index(0);
@@ -72,7 +91,7 @@ BOOST_AUTO_TEST_CASE(simple_tests)
 	BOOST_CHECK(idx1.isValid());
 	BOOST_CHECK_EQUAL(idx1.row(), 3); // moved to 3 position
 
-	model.assign(assign_data);
+	assign(model, assign_data);
 	BOOST_CHECK_EQUAL(model.index(0).data().toInt(), 1);
 
 	// assignment always resets model
@@ -89,7 +108,7 @@ BOOST_AUTO_TEST_CASE(filter_tests)
 
 	model.filter_by(25);
 	model.sort_by(std::greater<>());
-	model.append(assign_data);
+	append(model, assign_data);
 
 	expected_data = {100, 50, 33, 25};
 	BOOST_CHECK_EQUAL_COLLECTIONS(model.begin(), model.end(), expected_data.begin(), expected_data.end());

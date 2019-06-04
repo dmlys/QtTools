@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <memory>
 #include <vector>
 #include <algorithm>
@@ -165,8 +165,8 @@ namespace viewed
 		const_reference front() const { return m_store.front(); }
 		const_reference back()  const { return m_store[m_nvisible - 1]; }
 
-		size_type size() const noexcept { return m_nvisible; }
-		bool empty()     const noexcept { return m_nvisible; }
+		size_type size() const noexcept { return     m_nvisible; }
+		bool empty()     const noexcept { return not m_nvisible; }
 
 	public:
 		const auto & sort_pred()   const { return m_sort_pred; }
@@ -176,8 +176,25 @@ namespace viewed
 		template <class ... Args> void sort_by(Args && ... args);
 
 	public:
-		/// erases all elements
-		void clear();
+		auto unfiltered_data() const noexcept { return boost::sub_range<const value_container>(m_store); }
+
+	public:
+		/// clear container and assigns elements from [first, last)
+		template <class SinglePassIterator>
+		void assign(SinglePassIterator first, SinglePassIterator last);
+
+		/// appends new record from [first, last)
+		template <class SinglePassIterator>
+		void append(SinglePassIterator first, SinglePassIterator last);
+
+		template <class Modifier>
+		void modify(const_iterator first, const_iterator last, Modifier modifier);
+
+
+		template <class Arg> void append(Arg && arg)    { append(&arg, std::next(&arg)); }
+		template <class Arg> void push_back(Arg && arg) { return append(std::forward<Arg>(arg)); }
+
+		template <class Arg> iterator insert(const_iterator where, Arg && arg) { return insert(where, &arg, std::next(&arg)); }
 
 		/// erases elements [first, last)
 		/// [first, last) must be a valid range
@@ -185,25 +202,8 @@ namespace viewed
 		/// erase element pointed by it
 		const_iterator erase(const_iterator it) { return erase(it, std::next(it)); }
 
-		/// appends new record from [first, last)
-		template <class SinglePassIterator>
-		auto append(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
-
-		/// clear container and assigns elements from [first, last)
-		template <class SinglePassIterator>
-		auto assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>;
-
-
-		template <class SinglePassRange>
-		auto append(SinglePassRange && range) -> std::enable_if_t<std::is_convertible_v<ext::range_value_t<SinglePassRange>, value_type>>
-		{ return append(boost::begin(range), boost::end(range)); }
-
-		template <class SinglePassRange>
-		auto assign(SinglePassRange && range) -> std::enable_if_t<std::is_convertible_v<ext::range_value_t<SinglePassRange>, value_type>>
-		{ return assign(boost::begin(range), boost::end(range)); }
-
-		template <class Arg> auto append(Arg && arg) -> std::enable_if_t<std::is_convertible_v<Arg, value_type>> { append(&arg, &arg + 1); }
-		template <class Arg> void push_back(Arg && arg) { return append(std::forward<Arg>(arg)); }
+		/// erases all elements
+		void clear();
 
 	public:
 		virtual ~sflist_model_qtbase() = default;
@@ -510,28 +510,8 @@ namespace viewed
 	}
 
 	template <class Type, class Sorter, class Filter>
-	auto sflist_model_qtbase<Type, Sorter, Filter>::erase(const_iterator first, const_iterator last) -> const_iterator
-	{
-		if (first == last) return first;
-
-		assert(first <= last);
-		assert(m_store.begin() <= first and last <= m_store.end());
-
-		int first_pos = first - m_store.begin();
-		int last_pos  = last  - m_store.begin();
-
-		auto * model = get_model();
-		model->beginRemoveRows(model_type::invalid_index, first_pos, last_pos - 1);
-		auto ret = m_store.erase(first, last);
-		m_nvisible -= std::max<int>(0, m_nvisible - std::min<size_type>(last_pos, m_nvisible));
-		model->endRemoveRows();
-
-		return ret;
-	}
-
-	template <class Type, class Sorter, class Filter>
 	template <class SinglePassIterator>
-	auto sflist_model_qtbase<Type, Sorter, Filter>::assign(SinglePassIterator first, SinglePassIterator last) -> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
+	void sflist_model_qtbase<Type, Sorter, Filter>::assign(SinglePassIterator first, SinglePassIterator last)
 	{
 		auto * model = get_model();
 		model->beginResetModel();
@@ -555,7 +535,7 @@ namespace viewed
 
 	template <class Type, class Sorter, class Filter>
 	template <class SinglePassIterator>
-	std::enable_if_t<ext::is_iterator_v<SinglePassIterator>> sflist_model_qtbase<Type, Sorter, Filter>::append(SinglePassIterator first, SinglePassIterator last) //-> std::enable_if_t<ext::is_iterator_v<SinglePassIterator>>
+	void sflist_model_qtbase<Type, Sorter, Filter>::append(SinglePassIterator first, SinglePassIterator last)
 	{
 		if (first == last) return;
 
@@ -611,10 +591,8 @@ namespace viewed
 			nlast = std::rotate(sfirst, npp, nlast);
 		}
 
-		// if some elements from visible area are changed and they still in the visible area - we need to resort them => resort whole visible area.
-		constexpr bool resort_old = false;
 		// resort visible area, merge new elements and changed from shadow area(std::stable sort + std::inplace_merge)
-		merge_newdata(vfirst, vlast, nlast, ifirst, imiddle, ifirst + (nlast - vfirst), resort_old);
+		merge_newdata(vfirst, vlast, nlast, ifirst, imiddle, ifirst + (nlast - vfirst), false);
 
 		// and erase removed elements
 		m_nvisible = nvisible_new;
@@ -624,6 +602,55 @@ namespace viewed
 		change_indexes(index_array.begin(), index_array.end(), offset);
 
 		model->layoutChanged(model_type::empty_model_list, model_type::NoLayoutChangeHint);
+	}
+
+	template <class Type, class Sorter, class Filter>
+	template <class Modifier>
+	void sflist_model_qtbase<Type, Sorter, Filter>::modify(const_iterator first, const_iterator last, Modifier modifier)
+	{
+		if (first == last) return;
+
+		auto * model = get_model();
+		model->layoutAboutToBeChanged(model_type::empty_model_list, model_type::NoLayoutChangeHint);
+
+		// update elements
+		for (; first != last; ++first)
+			modifier(ext::unconst(*first));
+
+		{
+			// lazy cowardice implementation
+			QSignalBlocker blocker(model);
+			refilter_full_and_notify();
+		}
+
+		model->layoutChanged(model_type::empty_model_list, model_type::NoLayoutChangeHint);
+	}
+
+	template <class Type, class Sorter, class Filter>
+	auto sflist_model_qtbase<Type, Sorter, Filter>::erase(const_iterator first, const_iterator last) -> const_iterator
+	{
+		if (first == last) return first;
+
+		assert(first <= last);
+		assert(m_store.begin() <= first and last <= m_store.end());
+
+		int first_pos = std::min<size_type>(first - m_store.begin(), m_nvisible);
+		int last_pos  = std::min<size_type>(last  - m_store.begin(), m_nvisible);
+
+		decltype(first) ret;
+
+		if (first_pos >= last_pos)
+			ret = m_store.erase(first, last);
+		else
+		{
+			auto * model = get_model();
+			model->beginRemoveRows(model_type::invalid_index, first_pos, last_pos - 1);
+			ret = m_store.erase(first, last);
+			m_nvisible -= last_pos - first_pos;
+			model->endRemoveRows();
+		}
+
+		return ret;
 	}
 
 } // namespace viewed
