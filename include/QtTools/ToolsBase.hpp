@@ -61,6 +61,20 @@ inline void ext::append<QString, const QChar *>(QString & str, const QChar * fir
 	str.append(first, last - first);
 }
 
+template <>
+struct ext::str_view_traits<QString>
+{
+	using char_type = char16_t;
+	using string_view = std::u16string_view;
+
+	inline static string_view str_view(const QString & str)
+	{
+		auto * ptr = reinterpret_cast<const char16_t *>(str.utf16());
+		return string_view(ptr, str.size());
+	}
+};
+
+
 inline uint hash_value(const QString & val)
 {
 	return qHash(val);
