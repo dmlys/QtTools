@@ -18,9 +18,6 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <Text Include="LICENSE_1_0.txt" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{3B471441-8DD5-4867-B6A9-909474E9E844}</ProjectGuid>
   </PropertyGroup>
@@ -44,139 +41,18 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\BasicHeaderControlModelHelper.cpp" />
-    <ClCompile Include="src\Delegates\SearchDelegate.cpp" />
-    <ClCompile Include="src\Delegates\StyledDelegate.cpp" />
-    <ClCompile Include="src\DrawText.cpp" />
-    <ClCompile Include="src\ExceptionError.cpp" />
-    <ClCompile Include="src\Delegates\CheckBoxDelegate.cpp" />
-    <ClCompile Include="src\DelayedExecutionTimer.cpp" />
-    <ClCompile Include="src\Delegates\StyledParts.cpp" />
-    <ClCompile Include="src\Delegates\DrawFormattedText.cpp" />
-    <ClCompile Include="src\Delegates\FormattedItemDelegate.cpp" />
-    <ClCompile Include="src\DynamicTable.cpp" />
-    <ClCompile Include="src\GuiQueue.cpp" />
-    <ClCompile Include="src\HeaderConfigurationWidget.cpp" />
-    <ClCompile Include="src\MdiModel.cpp" />
-    <ClCompile Include="src\qt_model.cpp" />
-    <ClCompile Include="src\ItemViewUtils.cpp" />
-    <ClCompile Include="src\ToolsBase.cpp" />
-    <ClCompile Include="src\StandardItemModel.cpp" />
-    <ClCompile Include="src\ListModel.cpp" />
-    <ClCompile Include="src\Utility.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <QtMOCCompile Include="include\QtTools\BasicHeaderControlModelHelper.hqt" />
-    <QtMOCCompile Include="include\QtTools\DelayedExecutionTimer.hqt" />
-    <QtMOCCompile Include="include\QtTools\DynamicTable.hqt" />
-    <QtMOCCompile Include="include\QtTools\GuiQueue.hqt" />
-    <QtMOCCompile Include="include\QtTools\HeaderConfigurationWidget.hqt" />
-    <QtMOCCompile Include="include\QtTools\MdiModel.hqt" />
-    <QtMOCCompile Include="include\QtTools\StandardItemModel.hqt" />
-    <QtMOCCompile Include="include\QtTools\ListModel.hqt" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="include\QtTools\BasicHeaderControlModel.hpp" />
-    <ClInclude Include="include\QtTools\DateUtils.hpp" />
-    <ClInclude Include="include\QtTools\Delegates\SearchDelegate.hpp" />
-    <ClInclude Include="include\QtTools\Delegates\StyledDelegate.hpp" />
-    <ClInclude Include="include\QtTools\DrawText.hpp" />
-    <ClInclude Include="include\QtTools\ExceptionError.hpp" />
-    <ClInclude Include="include\QtTools\HeaderControlModel.hqt" />
-    <ClInclude Include="include\QtTools\ItemViewUtils.hpp" />
-    <ClInclude Include="include\QtTools\ToggleChecked.hpp" />
-    <ClInclude Include="include\QtTools\Delegates\Utils.hpp" />
-    <ClInclude Include="include\QtTools\Delegates\CheckBoxDelegate.hpp" />
-    <ClInclude Include="include\QtTools\Delegates\FormattedItemDelegate.hpp" />
-    <ClInclude Include="include\QtTools\Delegates\StyledParts.hpp" />
-    <ClInclude Include="include\QtTools\Delegates\DrawFormattedText.hpp" />
-    <ClInclude Include="include\QtTools\StringInterpolation.hpp" />
-    <ClInclude Include="include\QtTools\ToolsBase.hpp" />
-    <ClInclude Include="include\QtTools\HeaderSectionInfo.hpp" />
-    <ClInclude Include="include\QtTools\Utility.hpp" />
-    <ClInclude Include="include\varalgo\adjacent_find.hpp" />
-    <ClInclude Include="include\varalgo\all.hpp" />
-    <ClInclude Include="include\varalgo\all_of.hpp" />
-    <ClInclude Include="include\varalgo\any_of.hpp" />
-    <ClInclude Include="include\varalgo\binary_find.hpp" />
-    <ClInclude Include="include\varalgo\binary_search.hpp" />
-    <ClInclude Include="include\varalgo\boost_variant_traits.hpp" />
-    <ClInclude Include="include\varalgo\copy_if.hpp" />
-    <ClInclude Include="include\varalgo\count_if.hpp" />
-    <ClInclude Include="include\varalgo\equal.hpp" />
-    <ClInclude Include="include\varalgo\equal_range.hpp" />
-    <ClInclude Include="include\varalgo\find_end.hpp" />
-    <ClInclude Include="include\varalgo\find_first_of.hpp" />
-    <ClInclude Include="include\varalgo\find_if.hpp" />
-    <ClInclude Include="include\varalgo\find_if_not.hpp" />
-    <ClInclude Include="include\varalgo\for_each.hpp" />
-    <ClInclude Include="include\varalgo\inplace_merge.hpp" />
-    <ClInclude Include="include\varalgo\is_partitioned.hpp" />
-    <ClInclude Include="include\varalgo\is_sorted.hpp" />
-    <ClInclude Include="include\varalgo\is_sorted_until.hpp" />
-    <ClInclude Include="include\varalgo\lower_bound.hpp" />
-    <ClInclude Include="include\varalgo\merge.hpp" />
-    <ClInclude Include="include\varalgo\minmax.hpp" />
-    <ClInclude Include="include\varalgo\minmax_element.hpp" />
-    <ClInclude Include="include\varalgo\mismatch.hpp" />
-    <ClInclude Include="include\varalgo\modifying_algo.hpp" />
-    <ClInclude Include="include\varalgo\non_modifying_algo.hpp" />
-    <ClInclude Include="include\varalgo\none_of.hpp" />
-    <ClInclude Include="include\varalgo\nth_element.hpp" />
-    <ClInclude Include="include\varalgo\on_sorted_algo.hpp" />
-    <ClInclude Include="include\varalgo\partial_sort.hpp" />
-    <ClInclude Include="include\varalgo\partial_sort_copy.hpp" />
-    <ClInclude Include="include\varalgo\partition.hpp" />
-    <ClInclude Include="include\varalgo\partition_algo.hpp" />
-    <ClInclude Include="include\varalgo\partition_copy.hpp" />
-    <ClInclude Include="include\varalgo\partition_point.hpp" />
-    <ClInclude Include="include\varalgo\remove_copy_if.hpp" />
-    <ClInclude Include="include\varalgo\remove_if.hpp" />
-    <ClInclude Include="include\varalgo\replace_copy_if.hpp" />
-    <ClInclude Include="include\varalgo\replace_if.hpp" />
-    <ClInclude Include="include\varalgo\search.hpp" />
-    <ClInclude Include="include\varalgo\search_n.hpp" />
-    <ClInclude Include="include\varalgo\set_operations.hpp" />
-    <ClInclude Include="include\varalgo\sort.hpp" />
-    <ClInclude Include="include\varalgo\sorting_algo.hpp" />
-    <ClInclude Include="include\varalgo\stable_partition.hpp" />
-    <ClInclude Include="include\varalgo\stable_sort.hpp" />
-    <ClInclude Include="include\varalgo\transform.hpp" />
-    <ClInclude Include="include\varalgo\unique.hpp" />
-    <ClInclude Include="include\varalgo\unique_copy.hpp" />
-    <ClInclude Include="include\varalgo\upper_bound.hpp" />
-    <ClInclude Include="include\varalgo\std_variant_traits.hpp" />
-    <ClInclude Include="include\viewed\algorithm.hpp" />
-    <ClInclude Include="include\viewed\associative_conatiner_base.hpp" />
-    <ClInclude Include="include\viewed\get_functor.hpp" />
-    <ClInclude Include="include\viewed\hash_container_base.hpp" />
-    <ClInclude Include="include\viewed\indirect_functor.hpp" />
-    <ClInclude Include="include\viewed\ordered_container_base.hpp" />
-    <ClInclude Include="include\viewed\ptr_sequence_container.hpp" />
-    <ClInclude Include="include\viewed\qt_model.hpp" />
-    <ClInclude Include="include\viewed\refilter_type.hpp" />
-    <ClInclude Include="include\viewed\selectable_sfview_qtbase.hpp" />
-    <ClInclude Include="include\viewed\sequence_container.hpp" />
-    <ClInclude Include="include\viewed\sfview_qtbase.hpp" />
-    <ClInclude Include="include\viewed\signal_traits.hpp" />
-    <ClInclude Include="include\viewed\view_base.hpp" />
-    <ClInclude Include="include\viewed\view_qtbase.hpp" />
+    <ClCompile Include="src\**\*.cpp" />
   </ItemGroup>
   <ItemGroup>
     <QtRCCCompile Include="resources\QtTools.qrc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="resources\icons\arrow-down.ico" />
-    <Image Include="resources\icons\arrow-up.ico" />
-    <Image Include="resources\icons\checkbox-toggle-selected.ico" />
-    <Image Include="resources\icons\edit-clear.ico" />
-    <Image Include="resources\icons\edit-reset.ico" />
+    <ClInclude Include="include\QtTools\**\*.hpp" />
+	<ClInclude Include="include\varalgo\**\*.hpp" />
+	<ClInclude Include="include\viewed\**\*.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="resources\icons\edit-clear.svg" />
-    <None Include="resources\icons\edit-undo.svg" />
-    <None Include="resources\icons\go-down.svg" />
-    <None Include="resources\icons\go-up.svg" />
+    <QtMOCCompile Include="include\QtTools\**\*.hqt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
