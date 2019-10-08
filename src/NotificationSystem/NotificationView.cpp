@@ -114,8 +114,13 @@ namespace QtTools::NotificationSystem
 	{
 		using boost::adaptors::transformed;
 		//const QChar newPar = QChar::ParagraphSeparator;
-		const auto plainSep = "\n" + QString(80, '-') + "\n";
-		const auto richSep = QStringLiteral("<hr>");
+		std::u16string plainsep;
+		plainsep.reserve(82);
+		plainsep += u'\n';
+		plainsep.append(80, u'-');
+		plainsep += u'\n';
+
+		std::u16string_view richsep  = u"<hr>";
 
 		QString plainText, richText;
 
@@ -123,8 +128,8 @@ namespace QtTools::NotificationSystem
 		auto plainTexts = indexes | transformed([this](auto & idx) { return ClipboardText(m_model->GetItem(idx.row())); });
 		auto richTexts  = indexes | transformed([this](auto & idx) { return m_model->GetItem(idx.row()).Text(); });
 
-		ext::join_into(plainTexts, plainSep, plainText);
-		ext::join_into(richTexts, richSep, richText);
+		ext::join_into(plainTexts, plainsep, plainText);
+		ext::join_into(richTexts, richsep, richText);
 
 		QMimeData * mime = new QMimeData;
 		mime->setText(plainText);

@@ -162,8 +162,8 @@ namespace QtTools::Json
 
 	QJsonValue find_path(QJsonValue node, std::string_view path)
 	{
-		auto first = path.begin();
-		auto last  = path.end();
+		auto first = path.data();
+		auto last  = first + path.size();
 
 		first = skip_separators(first);
 		while (first != last)

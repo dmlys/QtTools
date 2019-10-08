@@ -25,6 +25,13 @@ static_assert(std::is_same_v<QString::iterator, QChar *>);
 static_assert(std::is_same_v<QString::const_iterator, const QChar *>);
 static_assert(sizeof(ushort) == sizeof(char16_t) and alignof(ushort) == alignof(char16_t));
 
+
+template <>
+inline void ext::assign<QString, char16_t * >(QString & str, char16_t * first, char16_t * last)
+{
+	str.setUnicode(reinterpret_cast<QChar *>(first), last - first);
+}
+
 template <>
 inline void ext::assign<QString, const char16_t * >(QString & str, const char16_t * first, const char16_t * last)
 {
@@ -44,6 +51,12 @@ inline void ext::assign<QString, const QChar *>(QString & str, const QChar * fir
 }
 
 template <>
+inline void ext::append<QString, char16_t *>(QString & str, char16_t * first, char16_t * last)
+{
+	str.append(reinterpret_cast<QChar *>(first), last - first);
+}
+
+template <>
 inline void ext::append<QString, const char16_t *>(QString & str, const char16_t * first, const char16_t * last)
 {
 	str.append(reinterpret_cast<const QChar *>(first), last - first);
@@ -60,6 +73,31 @@ inline void ext::append<QString, const QChar *>(QString & str, const QChar * fir
 {
 	str.append(first, last - first);
 }
+
+#if not BOOST_LIB_STD_GNU
+namespace ext::qt_helpers
+{
+	struct dummy_type { const char16_t & operator *(); };
+
+
+	using u16sv_iterator = std::conditional_t<
+	    std::is_same_v<std::u16string_view::const_iterator, const char16_t *>,
+	    dummy_type, std::u16string_view::const_iterator
+	>;
+}
+
+template <>
+inline void ext::assign<QString, ext::qt_helpers::u16sv_iterator>(QString & str, ext::qt_helpers::u16sv_iterator first, ext::qt_helpers::u16sv_iterator last)
+{
+	return ext::assign(str, &*first, &*last);
+}
+
+template <>
+inline void ext::append<QString, ext::qt_helpers::u16sv_iterator>(QString & str, ext::qt_helpers::u16sv_iterator first, ext::qt_helpers::u16sv_iterator last)
+{
+	return ext::append(str, &*first, &*last);
+}
+#endif
 
 template <>
 struct ext::str_view_traits<QString>
