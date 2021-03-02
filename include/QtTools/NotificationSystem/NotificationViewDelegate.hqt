@@ -81,7 +81,7 @@ namespace QtTools::NotificationSystem
 		// but that size depends on current widget size: it can be quite big or very small.
 		// 
 		// So first take on width is: option.rect.width() but no less than 40 * fontMetrics.averageCharWidth() or m_curMaxWidth(described next)
-		// Than with layouting text part - set width to qtextdoc.idealWidth()
+		// Then with layouting text part - set width to qtextdoc.idealWidth()
 		// 
 		// After each sizeHint QAbstractItemView will remember y-coordinate where that item should be drawn: nextY = curY + sizeHint.height().
 		// Width will be maximum of all size hints.

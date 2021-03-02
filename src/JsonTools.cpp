@@ -1,18 +1,14 @@
-﻿#include <codecvt>
-#include <algorithm>
+﻿#include <algorithm>
 #include <iterator>
 #include <utility>
 #include <charconv>
 
 #include <ext/itoa.hpp>
-#include <ext/codecvt_conv/generic_conv.hpp>
-
 #include <QtTools/JsonTools.hpp>
 
 namespace QtTools::Json
 {
 	constexpr char separator = '/';
-	const std::codecvt_utf8<char16_t> u16_cvt;
 
 	std::string error_report(const QJsonParseError & error, const QByteArray & parse_source)
 	{

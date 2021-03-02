@@ -9,9 +9,10 @@
 
 #include <memory>
 #include <string>
-#include <codecvt>
+
 #include <ext/range.hpp>
 #include <ext/codecvt_conv/generic_conv.hpp>
+#include <ext/codecvt_conv/wchar_cvt.hpp>
 
 /************************************************************************/
 /*                некоторая интеграция QString в ext/boost::range       */
@@ -143,6 +144,7 @@ inline uint hash_value(const QTime & val)
 
 namespace std
 {
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
 	template <>
 	struct hash<QString>
 	{
@@ -170,6 +172,7 @@ namespace std
 			return qHash(str);
 		}
 	};
+#endif
 
 	template <>
 	struct hash<QDateTime>
@@ -206,8 +209,6 @@ namespace QtTools
 
 	namespace detail_qtstdstring
 	{
-		extern const std::codecvt_utf8<char16_t> & u8cvt;
-
 		inline const char16_t * data(const QString & str) noexcept { return reinterpret_cast<const char16_t *>(str.utf16()); }
 		inline       char16_t * data(      QString & str) noexcept { return const_cast<char16_t *>(reinterpret_cast<const char16_t *>(str.utf16())); }
 	}
@@ -258,7 +259,15 @@ namespace QtTools
 	/// преобразует utf-8 строку длинной len в utf-16 QString
 	/// размер res будет увеличиваться по требованию
 	void ToQString(const char * str, std::size_t len, QString & res);
+	void ToQString(const wchar_t  * str, std::size_t len, QString & res);
+	void ToQString(const char16_t * str, std::size_t len, QString & res);
+	void ToQString(const char32_t * str, std::size_t len, QString & res);
 
+	inline QString ToQString(const char * str, std::size_t len = -1)        { return QString::fromUtf8(str, len); }
+	inline QString ToQString(const wchar_t  * str, std::size_t len = -1)    { return QString::fromWCharArray(str, len); }
+	inline QString ToQString(const char16_t * str, std::size_t len = -1)    { return QString::fromUtf16(str, len); }
+	inline QString ToQString(const char32_t * str, std::size_t len = -1)    { return QString::fromUcs4(str, len); }
+	
 	/// преобразует utf-8 строку str длинной len в utf-16 QString, не превышая максимальное кол-во символов maxSize
 	/// и опционально заменяя последний символ(ret[maxSize - 1] на truncChar в случае если строка не умещается в maxSize
 	void ToQString(const char * str, std::size_t len, QString & res, std::size_t maxSize, QChar truncChar = 0);
@@ -268,48 +277,20 @@ namespace QtTools
 	void FromQString(const QString & qstr, Range & res)
 	{
 		auto inRng = boost::make_iterator_range_n(detail_qtstdstring::data(qstr), qstr.size());
-		ext::codecvt_convert::to_bytes(detail_qtstdstring::u8cvt, inRng, res);
+		ext::codecvt_convert::wchar_cvt::to_utf8(inRng, res);
 	}
 
 	/************************************************************************/
 	/*               ToQString/FromQString overloads                        */
 	/************************************************************************/
-
-	template <class Range>
-	inline void ToQString(const Range & rng, QString & res)
-	{
-		ToQString(ext::data(rng), boost::size(rng), res);
-	}
-
-	template <class Range>
-	inline QString ToQString(const Range & rng, std::size_t maxSize, QChar truncChar = 0)
-	{
-		QString res;
-		ToQString(ext::data(rng), boost::size(rng), res, maxSize, truncChar);
-		return res;
-	}
-
-	template <class Range>
-	inline QString ToQString(const Range & rng)
-	{
-		return QString::fromUtf8(ext::data(rng), qint(boost::size(rng)));
-	}
-
-	inline QString ToQString(const char * str)
-	{
-		return QString::fromUtf8(str);
-	}
+	template <class Range> inline    void ToQString(const Range & rng, QString & res) { ToQString(ext::data(rng), boost::size(rng), res); }
+	template <class Range> inline QString ToQString(const Range & rng) { return ToQString(ext::data(rng), qint(boost::size(rng))); }
 
 	/// noop overloads
 	inline QString ToQString(const QString & str) noexcept { return str; };
-	inline void ToQString(const QString & str, QString & res) noexcept { res = str; }
-
-
-	inline void FromQString(const QString & qstr, QString & res) noexcept
-	{
-		res = qstr;
-	}
-
+	inline void ToQString(const QString & str, QString & res) noexcept { res.append(str); }
+	inline void FromQString(const QString & qstr, QString & res) noexcept { res.append(qstr); }
+	
 	template <class ResultRange = std::string>
 	inline ResultRange FromQString(const QString & qstr)
 	{
@@ -323,7 +304,16 @@ namespace QtTools
 	{
 		return qstr;
 	}
-
+	
+	
+	template <class Range>
+	inline QString ToQString(const Range & rng, std::size_t maxSize, QChar truncChar = 0)
+	{
+		QString res;
+		ToQString(ext::data(rng), boost::size(rng), res, maxSize, truncChar);
+		return res;
+	}
+	
 } // namespace QtTools
 
 inline std::ostream & operator <<(std::ostream & os, const QString & str)
