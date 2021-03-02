@@ -5,6 +5,7 @@ StaticLibrary
 {
 	Depends { name: "cpp" }
 	Depends { name: "extlib" }
+	Depends { name: "dmlys.qbs-common"; required: false }
 	Depends { name: "ProjectSettings"; required: false }
 
 	Depends { name: "Qt"; submodules: ["core", "gui", "widgets"] }

@@ -4,21 +4,20 @@ import qbs.Environment
 CppApplication
 {
 	type: base.concat("autotest")
+	consoleApplication: true
 
 	Depends { name: "cpp" }
 	Depends { name: "extlib" }
 	Depends { name: "QtTools" }
+	
+	Depends { name: "dmlys.qbs-common"; required: false }
 	Depends { name: "ProjectSettings"; required: false }
 
 	Depends { name: "Qt"; submodules: ["core", "gui", "widgets"] }
 
 	cpp.cxxLanguageVersion : "c++17"
-	cpp.cxxFlags: project.additionalCxxFlags
-	cpp.driverFlags: project.additionalDriverFlags
-	cpp.defines: ["BOOST_TEST_DYN_LINK"].uniqueConcat(project.additionalDefines || [])
-	cpp.systemIncludePaths: project.additionalSystemIncludePaths
-	cpp.includePaths: ["include"].uniqueConcat(project.additionalIncludePaths || [])
-	cpp.libraryPaths: project.additionalLibraryPaths
+	// on msvc boost are usually static, on posix - shared
+	cpp.defines: qbs.toolchain.contains("msvc") ? [] : ["BOOST_TEST_DYN_LINK"]
 
 	cpp.dynamicLibraries: [
 		"stdc++fs", "fmt",
