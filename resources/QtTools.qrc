@@ -9,6 +9,9 @@
     <file alias="go-up.svg">icons/go-up.svg</file>
     <file alias="go-down.svg">icons/go-down.svg</file>
 
+    <file alias="password-show-on.svg">icons/password-show-on.svg</file>
+    <file alias="password-show-off.svg">icons/password-show-off.svg</file>
+
     <file alias="checkbox-toggle-selected.ico">icons/checkbox-toggle-selected.ico</file>    
   </qresource>
 </RCC>
