@@ -648,7 +648,7 @@ namespace viewed
 	template <class Pred>
 	inline auto sftree_facade_qtbase<Traits, ModelBase>::make_ivalue_ptr_filter(const Pred & pred)
 	{
-		return ivalue_ptr_filter_type(pred);
+		return ivalue_ptr_filter_type<Pred>(pred);
 	}
 
 	/************************************************************************/

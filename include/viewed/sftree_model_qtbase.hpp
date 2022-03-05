@@ -126,7 +126,7 @@ namespace viewed
 
 		auto pred = [this, erased_first, erased_last](auto & ptr)
 		{
-			// e1 - from [erased_first, erased-last), e2 - from ptr
+			// e1 - from [erased_first, erased_last), e2 - from ptr
 			auto pred = [this](auto * e1, auto * e2) { return this->path_group_pred(viewed::unmark_pointer(e1), e2); };
 
 			// not (*it < ptr.get())
@@ -182,7 +182,7 @@ namespace viewed
 
 		auto pred = [this, ex_first, ex_last](auto & ptr)
 		{
-			// e1 - from [erased_first, erased-last), e2 - from ptr
+			// e1 - from [ex_first, ex_last), e2 - from ptr
 			auto pred = [this](auto * e1, auto * e2) { return this->path_group_pred(e1, e2); };
 
 			// not (*it < ptr.get())
