@@ -1,5 +1,6 @@
 import qbs
 import qbs.Environment
+import dmlys.BuildUtils
 
 CppApplication
 {
@@ -18,13 +19,36 @@ CppApplication
 	cpp.cxxLanguageVersion : "c++17"
 	// on msvc boost are usually static, on posix - shared
 	cpp.defines: qbs.toolchain.contains("msvc") ? [] : ["BOOST_TEST_DYN_LINK"]
-
-	cpp.dynamicLibraries: [
-		"stdc++fs", "fmt",
-		//"boost_system",
-		//"boost_test_exec_monitor",
-		"boost_unit_test_framework"
-	]
+	
+	cpp.dynamicLibraries:
+	{
+		if (qbs.toolchain.contains("gcc") || qbs.toolchain.contains("clang"))
+		{
+			var libs = [
+				//"boost_system",
+				//"boost_test_exec_monitor",
+				"boost_unit_test_framework",
+				"fmt", "stdc++fs",
+			]
+		
+			libs = BuildUtils.make_libs(qbs, cpp, libs)
+			return libs
+		}
+		
+		if (qbs.toolchain.contains("msvc"))
+		{
+			var libs = [
+				//"boost_system",
+				//"boost_test_exec_monitor",
+				//"boost_unit_test_framework"
+				"libfmt",
+				
+			]
+			
+			libs = BuildUtils.make_libs(qbs, cpp, libs)
+			return libs
+		}
+	}
 
 	FileTagger {
 		patterns: "*.hqt"
@@ -32,6 +56,6 @@ CppApplication
 	}
 
 	files: [
-		"tests/**"
-    ]
+		"tests/**",
+	]
 }
