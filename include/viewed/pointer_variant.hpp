@@ -501,7 +501,7 @@ namespace viewed
 		>
 	{
 		using result_type = std::invoke_result_t<Visitor, boost::mp11::mp_first<ext::remove_cvref_t<Variants>>...>;
-		return visit<result_type>(std::forward<Visitor>(vis), std::forward<Variants>(vars)...);
+		return viewed::visit<result_type>(std::forward<Visitor>(vis), std::forward<Variants>(vars)...);
 	}
 
 	template <class ResultType, class Visitor, class ... Variants>

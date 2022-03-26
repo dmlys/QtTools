@@ -90,8 +90,6 @@ BOOST_AUTO_TEST_CASE(virtual_base)
 	viewed::pointer_variant<A *, D *> v1 = ptr.get();
 	viewed::pointer_variant<A *, D *> v2 = static_cast<B *>(ptr.get());
 	viewed::pointer_variant<A *     > v3 = ptr.get();
-
-
 }
 
 BOOST_AUTO_TEST_CASE(get_test)
