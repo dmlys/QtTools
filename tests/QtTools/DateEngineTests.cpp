@@ -1,7 +1,7 @@
 #include <boost/test/unit_test.hpp>
 #include <QtTools/ToolsBase.hpp>
 #include <QtTools/DatetimeEngine.hpp>
-#include <ext/time_fmt.hpp>
+#include <ext/time.hpp>
 
 namespace std
 {
