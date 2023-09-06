@@ -66,9 +66,14 @@ namespace viewed
 		bool m_partition_by_selection_asc = true;
 
 	public:
-		bool is_partiotioned_by_selection() const { return m_partition_by_selection; }
-		bool is_partiotioned_by_selection_asc() const { return m_partition_by_selection_asc; }
+		bool is_partitioned_by_selection() const { return m_partition_by_selection; }
+		bool is_partitioned_by_selection_asc() const { return m_partition_by_selection_asc; }
 
+		/// partitions by selected attribute in asc/desc order
+		void partition_by_selection(bool asc = true);
+		/// turns of partitioning by selected attribute, resorts store according to sort predicate if requested
+		void reset_partitioning(bool resort = true);
+		
 		iterator select(iterator it)                    { return set_selected(it, true); }
 		iterator deselect(iterator it)                  { return set_selected(it, false); }
 		iterator toggle_selected(iterator it)           { return set_selected(it, !is_selected(it)); }
@@ -156,6 +161,22 @@ namespace viewed
 		selectable_sfview_qtbase & operator =(const selectable_sfview_qtbase &) = delete;
 	};
 
+	template <class Container, class SortPred, class FilterPred>
+	void selectable_sfview_qtbase<Container, SortPred, FilterPred>::partition_by_selection(bool asc)
+	{
+		m_partition_by_selection = true;
+		m_partition_by_selection_asc = asc;
+		partition_and_notify(m_store.begin(), m_store.end());
+	}
+	
+	template <class Container, class SortPred, class FilterPred>
+	void selectable_sfview_qtbase<Container, SortPred, FilterPred>::reset_partitioning(bool resort)
+	{
+		m_partition_by_selection = false;
+		if (resort)
+			base_type::sort_and_notify(m_store.begin(), m_store.end());
+	}
+	
 	template <class Container, class SortPred, class FilterPred>
 	auto selectable_sfview_qtbase<Container, SortPred, FilterPred>::set_selected(iterator it, bool selected) -> iterator
 	{
@@ -249,7 +270,8 @@ namespace viewed
 			pp = std::partition_point(m_store.begin(), m_store.end(), pred);
 		}
 
-		return ext::slide(it, it + 1, pp).first;
+		auto ret = ext::slide(it, it + 1, pp).first;
+		return iterator(ret);
 	}
 
 	template <class Container, class SortPred, class FilterPred>
@@ -272,7 +294,8 @@ namespace viewed
 			pp = std::partition_point(m_store.begin(), m_store.end(), pred);
 		}
 
-		return ext::slide(ifirst, ilast, pp);
+		auto ret = ext::slide(ifirst, ilast, pp);
+		return std::make_pair(iterator(ret.first), iterator(ret.second));
 	}
 
 	template <class Container, class SortPred, class FilterPred>
@@ -343,7 +366,7 @@ namespace viewed
 		partition(first, last, ifirst, ilast);
 
 		viewed::inverse_index_array(ifirst, ilast, offset);
-		change_indexes(ifirst, ilast, offset);
+		change_indexes(model, ifirst, ilast, offset);
 
 		Q_EMIT model->layoutChanged(model_type::empty_model_list, model->VerticalSortHint);
 	}
