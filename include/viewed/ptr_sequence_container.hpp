@@ -52,10 +52,10 @@ namespace viewed
 	*/
 
 	/// default ptr_sequence_container traits. Elements stored in vector<std::unique_ptr<Type>>
-	template <class Type>
+	template <class Type, class OwningPointer = std::unique_ptr<Type>>
 	struct default_ptr_sequence_container_traits
 	{
-		using internal_value_type = std::unique_ptr<Type>;
+		using internal_value_type = OwningPointer;
 		using main_store_type     = std::vector<internal_value_type>;
 		using signal_store_type   = std::vector<const Type *>;
 
@@ -317,8 +317,6 @@ namespace viewed
 	void ptr_sequence_container<Type, Traits, SignalTraits>::assign
 		(SinglePassIterator first, SinglePassIterator last)
 	{
-		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, value_type>);
-
 		signal_store_type erased, updated, inserted;
 		ext::try_reserve(inserted, first, last);
 
@@ -343,8 +341,6 @@ namespace viewed
 	auto ptr_sequence_container<Type, Traits, SignalTraits>::insert
 		(const_iterator where, SinglePassIterator first, SinglePassIterator last) -> iterator
 	{
-		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, value_type>);
-
 		signal_store_type erased, updated, inserted;
 
 		auto make_internal = [](auto && val) { return self_type::make_internal(std::forward<decltype(val)>(val)); };
