@@ -1188,7 +1188,7 @@ namespace viewed
 
 			auto oldsize = code_view.size();
 			auto rollback = [key_extractor, key](auto & item) { key_extractor(item) = key; };
-			code_view.modify(found_it, modifier, std::move(rollback));
+			bool result = code_view.modify(found_it, modifier, std::move(rollback));
 			assert(oldsize == code_view.size());
 		}
 

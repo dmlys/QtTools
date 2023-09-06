@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <cstdint> // for std::uintptr_t
 #include <cstddef>
 #include <memory>  // for std::unique_ptr
 #include <utility> // for std::exchange, std::in_place_index, std::in_place_type
@@ -543,7 +544,7 @@ namespace viewed
 	template <class ... PointerTypes>
 	constexpr inline bool operator <(const pointer_variant<PointerTypes...> & v1, const pointer_variant<PointerTypes...> & v2)
 	{
-		return v1.index() < v1.index() or v1.index() == v2.index() and v1.pointer() < v2.pointer();
+		return v1.index() < v1.index() or (v1.index() == v2.index() and v1.pointer() < v2.pointer());
 	}
 
 	template <class ... PointerTypes>

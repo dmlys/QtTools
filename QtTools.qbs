@@ -11,14 +11,9 @@ StaticLibrary
 	Depends { name: "Qt"; submodules: ["core", "gui", "widgets"] }
 
 	cpp.cxxLanguageVersion : "c++17"
-	cpp.cxxFlags: project.additionalCxxFlags
-	cpp.driverFlags: project.additionalDriverFlags
-	//cpp.defines: project.additionalDefines
-	cpp.systemIncludePaths: project.additionalSystemIncludePaths
-	cpp.includePaths: ["include"].uniqueConcat(project.additionalIncludePaths || [])
-	cpp.libraryPaths: project.additionalLibraryPaths
+	cpp.includePaths: ["include"]
 
-
+	
 	Export
 	{
 		Depends { name: "cpp" }

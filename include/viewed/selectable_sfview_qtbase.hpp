@@ -18,7 +18,7 @@ namespace viewed
 	/// In derived class you can provide methods like sort_by/filter_by,
 	/// which will configure those predicates
 	/// 
-	/// it also provides an ability to select some elements(mark them as selected)
+	/// view also provides an ability to select some elements(mark them as selected)
 	/// and then partition on those elements
 	/// 
 	/// @Param Container - class to which this view will connect and listen updates, see view_base for more description

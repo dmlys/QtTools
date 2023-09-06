@@ -9,16 +9,11 @@ CppApplication
 
 	Depends { name: "Qt"; submodules: ["core", "gui", "widgets"] }
 
+	Depends { name: "dmlys.qbs-common"; required: false }
 	Depends { name: "ProjectSettings"; required: false }
 
 	cpp.cxxLanguageVersion : "c++17"
-	cpp.cxxFlags: project.additionalCxxFlags
-	cpp.driverFlags: project.additionalDriverFlags
-	//cpp.defines: project.additionalDefines
-	cpp.systemIncludePaths: project.additionalSystemIncludePaths
-	cpp.includePaths: ["include"].uniqueConcat(project.additionalIncludePaths || [])
-	cpp.libraryPaths: project.additionalLibraryPaths
-
+	cpp.includePaths: ["include"]
 	cpp.dynamicLibraries: ["stdc++fs", "boost_system", "fmt"]
 
 
