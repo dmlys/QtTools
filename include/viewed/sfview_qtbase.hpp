@@ -205,21 +205,16 @@ namespace viewed
 		const signal_range_type & sorted_updated,
 		const signal_range_type & inserted)
 	{
-		if (not active(m_sort_pred) and not active(m_filter_pred))
-			base_type::update_data(sorted_erased, sorted_updated, inserted);
-		else
-		{
-			boost::push_back(m_store, sorted_updated);
-			boost::push_back(m_store, inserted);
+		boost::push_back(m_store, sorted_updated);
+		boost::push_back(m_store, inserted);
 
-			auto first = m_store.begin();
-			auto last = m_store.end();
-			auto first_inserted = last - inserted.size();
-			auto first_updated = first_inserted - sorted_updated.size();
+		auto first = m_store.begin();
+		auto last = m_store.end();
+		auto first_inserted = last - inserted.size();
+		auto first_updated = first_inserted - sorted_updated.size();
 
-			update_store(first, first_updated, first_inserted, last,
-			             sorted_erased.begin(), sorted_erased.end());
-		}
+		update_store(first, first_updated, first_inserted, last,
+		             sorted_erased.begin(), sorted_erased.end());
 	}
 
 	template <class Container, class SortPred, class FilterPred>
@@ -259,10 +254,8 @@ namespace viewed
 		// 
 		// left updated and inserted than merged to m_store, also merge operation permutates index_array,
 		// which is used to update qt persistent indexes
-
-		// this case(both not active) is handled by update_data(forwarded to view_qtbase implementation)
-		assert(active(m_sort_pred) or active(m_filter_pred));
-
+		
+		
 		// currently just assume first always is beginning of m_store
 		assert(first == m_store.begin());
 		// updated part must be sorted by pointer addr
@@ -500,21 +493,16 @@ namespace viewed
 	template <class Container, class SortPred, class FilterPred>
 	void sfview_qtbase<Container, SortPred, FilterPred>::refilter_full_and_notify()
 	{
-		if (not active(m_sort_pred) and not active(m_filter_pred))
-			base_type::reinit_view();
-		else
-		{
-			auto sz = m_store.size();
-			boost::push_back(m_store, *m_owner | boost::adaptors::transformed(get_view_pointer));
+		auto sz = m_store.size();
+		boost::push_back(m_store, *m_owner | boost::adaptors::transformed(get_view_pointer));
 
-			auto first = m_store.begin();
-			auto last = m_store.end();
-			auto first_updated = first + sz;
-			std::sort(first_updated, last);
+		auto first = m_store.begin();
+		auto last = m_store.end();
+		auto first_updated = first + sz;
+		std::sort(first_updated, last);
 
-			signal_const_iterator noerased {};
-			update_store(first, first_updated, last, last, noerased, noerased);
-		}
+		signal_const_iterator noerased {};
+		update_store(first, first_updated, last, last, noerased, noerased);
 	}
 
 	template <class Container, class SortPred, class FilterPred>
