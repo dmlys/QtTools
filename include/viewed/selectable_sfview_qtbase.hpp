@@ -63,37 +63,37 @@ namespace viewed
 		selection_set_type m_selection_set;
 
 		bool m_partition_by_selection = false;
-		bool m_partition_by_selection_asc = true;
+		bool m_partition_by_selection_checked_first = true;
 
 	public:
-		bool is_partitioned_by_selection() const { return m_partition_by_selection; }
-		bool is_partitioned_by_selection_asc() const { return m_partition_by_selection_asc; }
-
-		/// partitions by selected attribute in asc/desc order
-		void partition_by_selection(bool asc = true);
-		/// turns of partitioning by selected attribute, resorts store according to sort predicate if requested
-		void reset_partitioning(bool resort = true);
-		
-		iterator select(iterator it)                    { return set_selected(it, true); }
-		iterator deselect(iterator it)                  { return set_selected(it, false); }
-		iterator toggle_selected(iterator it)           { return set_selected(it, !is_selected(it)); }
-
 		/// returns a const range of selected elements,
 		/// order of elements is undefined
 		const selection_set_type & seleted_elements() const { return m_selection_set; }
+		
+		bool is_partitioned_by_selection() const { return m_partition_by_selection; }
+		bool is_partitioned_by_selection_checked_first() const { return m_partition_by_selection_checked_first; }
 
+		/// partitions by selected attribute in asc/desc order
+		void partition_by_selection(bool checked_first = true);
+		/// turns of partitioning by selected attribute, resorts store according to sort predicate if requested
+		void reset_partitioning(bool resort = true);
+		
 		/// sets element by it to selected state.
 		/// adjusts order if we are partitioned by selection.
 		/// returns iterator after adjustion.
 		virtual iterator set_selected(iterator it, bool selected);
 		virtual bool is_selected(const_iterator it) const   { return m_selection_set.count(*it.base()); }
-
+		
 		/// sets element by it to selected state.
 		/// adjusts order if we are partitioned by selection.
 		/// returns iterator after adjustion.
 		/// emits appropriate qt signals
 		virtual iterator select_and_notify(iterator it, bool selected);
-
+		
+		iterator select(iterator it)                    { return set_selected(it, true); }
+		iterator deselect(iterator it)                  { return set_selected(it, false); }
+		iterator toggle_selected(iterator it)           { return set_selected(it, !is_selected(it)); }
+		
 		/// emits qt beginResetModel/endResetModel
 		virtual void clear_selection();
 
@@ -162,10 +162,10 @@ namespace viewed
 	};
 
 	template <class Container, class SortPred, class FilterPred>
-	void selectable_sfview_qtbase<Container, SortPred, FilterPred>::partition_by_selection(bool asc)
+	void selectable_sfview_qtbase<Container, SortPred, FilterPred>::partition_by_selection(bool checked_first)
 	{
 		m_partition_by_selection = true;
-		m_partition_by_selection_asc = asc;
+		m_partition_by_selection_checked_first = checked_first;
 		partition_and_notify(m_store.begin(), m_store.end());
 	}
 	
@@ -261,7 +261,7 @@ namespace viewed
 		auto it = m_store.begin() + (ext_it.base() - m_store.begin()); // make iterator from const_iterator
 		decltype(it) pp;
 
-		if (m_partition_by_selection_asc) {
+		if (m_partition_by_selection_checked_first) {
 			auto pred = [this](auto ptr) { return m_selection_set.count(ptr) != 0; };
 			pp = std::partition_point(m_store.begin(), m_store.end(), pred);
 		}
@@ -283,7 +283,7 @@ namespace viewed
 		auto ilast = m_store.begin() + (last.base() - m_store.begin());
 		decltype(ifirst) pp;
 
-		if (m_partition_by_selection_asc)
+		if (m_partition_by_selection_checked_first)
 		{
 			auto pred = [this](auto ptr) { return m_selection_set.count(ptr) != 0; };
 			pp = std::partition_point(m_store.begin(), m_store.end(), pred);
@@ -318,7 +318,7 @@ namespace viewed
 	void selectable_sfview_qtbase<Container, SortPred, FilterPred>::
 		partition(store_iterator first, store_iterator last)
 	{
-		if (m_partition_by_selection_asc)
+		if (m_partition_by_selection_checked_first)
 		{
 			auto pred = [this](view_pointer_type ptr) { return m_selection_set.count(ptr) != 0; };
 			std::stable_partition(first, last, pred);
@@ -338,7 +338,7 @@ namespace viewed
 		auto zfirst = ext::make_zip_iterator(first, ifirst);
 		auto zlast = ext::make_zip_iterator(last, ilast);
 
-		if (m_partition_by_selection_asc)
+		if (m_partition_by_selection_checked_first)
 		{
 			auto pred = [this](view_pointer_type ptr) { return m_selection_set.count(ptr) != 0; };
 			std::stable_partition(zfirst, zlast, viewed::make_get_functor<0>(pred));
@@ -421,7 +421,7 @@ namespace viewed
 		auto begIt = m_store.begin();
 		auto endIt = m_store.end();
 		
-		bool asc = m_partition_by_selection_asc;
+		bool asc = m_partition_by_selection_checked_first;
 		decltype(begIt) pp;
 		if (asc)
 		{

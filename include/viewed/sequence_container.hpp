@@ -307,7 +307,7 @@ namespace viewed
 	void sequence_container<Type, Traits, SignalTraits>::assign
 		(SinglePassIterator first, SinglePassIterator last)
 	{
-		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, size_type>);
+		static_assert(std::is_convertible_v<ext::iterator_value_t<SinglePassIterator>, value_type>);
 
 		signal_store_type erased, updated, inserted;
 		ext::try_reserve(inserted, first, last);
