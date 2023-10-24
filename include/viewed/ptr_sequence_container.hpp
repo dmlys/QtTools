@@ -146,6 +146,7 @@ namespace viewed
 		using traits_type    = Traits;
 		using signal_traits  = SignalTraits;
 	
+		using internal_value_type = typename traits_type::internal_value_type;
 		using main_store_type   = typename traits_type::main_store_type;
 		using signal_store_type = typename traits_type::signal_store_type;
 
