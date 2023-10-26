@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <cstdint>
 #include <tuple>
 #include <string>
 #include <string_view>
