@@ -330,7 +330,8 @@ namespace viewed
 		auto first = m_store.begin();
 		auto last  = first + m_nvisible;
 
-		return varalgo::equal_range(first, last, *ptr, m_sort_pred);
+		auto comp = std::cref(m_sort_pred);
+		return varalgo::equal_range(first, last, *ptr, comp);
 	}
 
 	template <class Type, class Sorter, class Filter>
