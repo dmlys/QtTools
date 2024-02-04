@@ -1,4 +1,5 @@
 #include <QtWidgets/QHeaderView>
+#include <QtWidgets/QListView>
 #include <QtWidgets/QTableView>
 #include <QtWidgets/QTreeView>
 #include <QtWidgets/QLayout>
@@ -35,9 +36,69 @@ namespace QtTools
 		return width;
 	}
 
+	int ItemViewWidthHint(const QListView * view, bool withScrollBar)
+	{
+		const auto * model = view->model();
+		if (not model) return view->sizeHint().width();
+		
+		constexpr QModelIndex parent;
+		const int rc = model->rowCount(parent);
+		const int mc = view->modelColumn();
+		
+		int width = 0;
+		QRect area;
+		
+		for (int i = 0; i < rc; ++i)
+		{
+			auto rect = view->visualRect(model->index(i, mc, parent));
+			area |= rect;
+			width = area.width();
+		}
+
+		width += view->frameWidth() * 2;
+		
+		if (withScrollBar)
+		{
+			auto * style = view->style();
+			width += style->pixelMetric(QStyle::PM_ScrollBarExtent);
+		}
+		
+		return width;
+	}
+	
+	int ItemViewHeightHint(const QListView * view, bool withScrollBar)
+	{
+		const auto * model = view->model();
+		if (not model) return view->sizeHint().width();
+		
+		constexpr QModelIndex parent;
+		const int rc = model->rowCount(parent);
+		const int mc = view->modelColumn();
+		
+		int height = 0;
+		QRect area;
+		
+		for (int i = 0; i < rc; ++i)
+		{
+			auto rect = view->visualRect(model->index(i, mc, parent));
+			area |= rect;
+			height = area.height();
+		}
+
+		height += view->frameWidth() * 2;
+		
+		if (withScrollBar)
+		{
+			auto * style = view->style();
+			height += style->pixelMetric(QStyle::PM_ScrollBarExtent);
+		}
+		
+		return height;
+	}
+	
 	int ItemViewWidthHint(const QTableView * view, bool withScrollBar)
 	{
-		// смотри также реализацию TableSizeHint, там есть важные пояснения
+		// смотри также реализацию ItemViewSizeHint, там есть важные пояснения
 		auto * model = view->model();
 		if (not model) return view->sizeHint().width();
 
@@ -63,7 +124,7 @@ namespace QtTools
 
 	int ItemViewHeightHint(const QTableView * view, bool withScrollBar)
 	{
-		// смотри также реализацию TableSizeHint, там есть важные пояснения
+		// смотри также реализацию ItemViewSizeHint, там есть важные пояснения
 		auto * model = view->model();
 		if (not model) return view->sizeHint().height();
 
@@ -89,7 +150,7 @@ namespace QtTools
 
 	int ItemViewWidthHint(const QTreeView * view, bool withScrollBar)
 	{
-		// смотри также реализацию TableSizeHint, там есть важные пояснения
+		// смотри также реализацию ItemViewSizeHint, там есть важные пояснения
 		auto * model = view->model();
 		if (not model) return view->sizeHint().width();
 
@@ -135,9 +196,7 @@ namespace QtTools
 		return height;
 	}
 
-	/// вычисляет отображение scrollbar'а по политике размеру и максимальному размеру.
-	/// например: ScrollBarVisible(view->horizontalScrollBarPolicy(), totalColumnWidth, maximumWidth)
-	static bool ScrollBarVisible(Qt::ScrollBarPolicy policy, int size, int maxSize)
+	bool ScrollBarVisible(Qt::ScrollBarPolicy policy, int size, int maxSize)
 	{
 		switch (policy)
 		{
@@ -147,11 +206,65 @@ namespace QtTools
 				return false;
 			case Qt::ScrollBarAlwaysOn:
 				return true;
-
-			default: Q_UNREACHABLE();
+			default:
+				return false;
 		}
 	}
 
+	QSize ItemViewSizeHint(const QListView * view, const QSize & minimum, const QSize & maximum, bool forceSB /* = false */)
+	{
+		const auto * model = view->model();
+		if (not model) return view->sizeHint();
+		
+		constexpr QModelIndex parent;
+		const int rc = model->rowCount(parent);
+		const int mc = view->modelColumn();
+		//const int cc = model->columnCount();
+	
+		int width = 0, height = 0;
+		const int minWidth = minimum.width();
+		const int minHeight = minimum.height();
+		const int maxWidth = std::max(minWidth, maximum.width());
+		const int maxHeight = std::max(minHeight, maximum.height());
+	
+		/// доп размеры
+		const int frameWidth = view->frameWidth() * 2;
+		const auto viewmode  = view->viewMode();
+		if (viewmode != view->ListMode)
+			return view->sizeHint();
+		
+		QRect area;
+		for (int i = 0; i < rc && height < maxHeight && width < maxWidth; ++i)
+		{
+			auto rect = view->visualRect(model->index(i, mc, parent));
+			area |= rect;
+			width = area.width();
+			height = area.height();
+		}
+	
+		bool horizontalScrollBarVisisble = forceSB ||
+			ScrollBarVisible(view->horizontalScrollBarPolicy(), width, maxWidth - frameWidth);
+		bool vertiacalScroolBarVisible = forceSB ||
+			ScrollBarVisible(view->verticalScrollBarPolicy(), height, maxHeight - frameWidth);
+	
+		const auto * style = view->style();
+		const auto sbextent = style->pixelMetric(QStyle::PM_ScrollBarExtent);
+	
+		if (horizontalScrollBarVisisble)
+			height += sbextent;
+	
+		if (vertiacalScroolBarVisible)
+			width += sbextent;
+	
+		width += frameWidth;
+		height += frameWidth;
+	
+		return {
+			qBound(minWidth, width, maxWidth),
+			qBound(minHeight, height, maxHeight)
+		};
+	}
+	
 	QSize ItemViewSizeHint(const QTableView * view, const QSize & minimum, const QSize & maximum, bool forceSB /* = false */)
 	{
 		const auto * model = view->model();
@@ -284,7 +397,7 @@ namespace QtTools
 	static QSize ItemViewSizeHint(const QWidget * us, const ViewWidget * view)
 	{
 		// maximum size - half screen
-		QSize maxSize = QApplication::desktop()->screenGeometry().size();
+		QSize maxSize = QApplication::desktop()->screenGeometry(view).size();
 		maxSize /= 2;
 		// but no more than maximumSize()
 		maxSize = maxSize.boundedTo(us->maximumSize());
@@ -306,6 +419,11 @@ namespace QtTools
 		return sz += addSz;
 	}
 
+	QSize ItemViewSizeHint(const QWidget * us, const QListView * view)
+	{
+		return ItemViewSizeHint<QListView>(us, view);
+	}
+	
 	QSize ItemViewSizeHint(const QWidget * us, const QTableView * view)
 	{
 		return ItemViewSizeHint<QTableView>(us, view);
