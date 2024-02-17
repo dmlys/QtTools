@@ -366,7 +366,7 @@ namespace viewed
 		partition(first, last, ifirst, ilast);
 
 		viewed::inverse_index_array(ifirst, ilast, offset);
-		change_indexes(model, ifirst, ilast, offset);
+		viewed::change_indexes(model, ifirst, ilast, offset);
 
 		Q_EMIT model->layoutChanged(model_type::empty_model_list, model->VerticalSortHint);
 	}
