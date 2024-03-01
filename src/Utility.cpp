@@ -8,6 +8,11 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+
+#ifdef LoadIcon
+#undef LoadIcon
+#endif
+
 #endif
 
 namespace QtTools
