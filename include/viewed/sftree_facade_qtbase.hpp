@@ -340,7 +340,9 @@ namespace viewed
 		static constexpr get_children_type       get_children {};
 		static constexpr get_children_count_type get_children_count {};
 
-		static constexpr node_accessor_type node_accessor {};
+		// sadly this breaks clangd in qtcreator, initialize outside of class
+		//static constexpr node_accessor_type node_accessor {};
+		static const node_accessor_type node_accessor;
 		static constexpr auto make_ref = [](auto * ptr) { return std::ref(*ptr); };
 
 	protected:
@@ -607,6 +609,9 @@ namespace viewed
 			};
 		}
 	};
+
+	template <class Traits, class ModelBase>
+	inline constexpr const typename sftree_facade_qtbase<Traits, ModelBase>::node_accessor_type sftree_facade_qtbase<Traits, ModelBase>::node_accessor {};
 
 	/************************************************************************/
 	/*                  value_ptr_filter_type definition                    */
