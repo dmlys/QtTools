@@ -71,8 +71,16 @@ void AbstractTestModel::sort(int column, Qt::SortOrder order /* = Qt::AscendingO
 	m_sortColumn = column;
 	m_sortOrder = order;
 
-	SortBy(column, order);
-	Q_EMIT SortingChanged(column, order);
+	if (column >= 0 and column <= columnCount())
+	{
+		SortBy(column, order);
+		Q_EMIT SortingChanged(column, order);
+	}
+	else
+	{
+		beginResetModel();
+		endResetModel();
+	}
 }
 
 

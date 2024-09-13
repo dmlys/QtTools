@@ -78,6 +78,7 @@ void TestTreeModelBase::recalculate_page(page_type & page)
 
 void TestTreeModelBase::SortBy(int section, Qt::SortOrder order)
 {
+	assert(section >= 0 and section < columnCount());
 	section = ViewToMetaIndex(section);
 	base_type::sort_by(section, order);
 }
