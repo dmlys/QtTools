@@ -611,7 +611,7 @@ namespace viewed
 	};
 
 	template <class Traits, class ModelBase>
-	inline constexpr const typename sftree_facade_qtbase<Traits, ModelBase>::node_accessor_type sftree_facade_qtbase<Traits, ModelBase>::node_accessor {};
+	inline const typename sftree_facade_qtbase<Traits, ModelBase>::node_accessor_type sftree_facade_qtbase<Traits, ModelBase>::node_accessor {};
 
 	/************************************************************************/
 	/*                  value_ptr_filter_type definition                    */
