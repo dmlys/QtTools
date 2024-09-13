@@ -9,6 +9,10 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 
+#ifdef _MSC_VER
+#pragma comment(lib, "User32.lib")
+#endif // _MSC_VER
+
 #ifdef LoadIcon
 #undef LoadIcon
 #endif
